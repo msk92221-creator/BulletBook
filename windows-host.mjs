@@ -12,9 +12,11 @@ const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
 const GRAPH_SCOPE =
   "openid profile offline_access https://graph.microsoft.com/Files.ReadWrite.AppFolder";
 const CLOUD_FILE_PATH = "/me/drive/special/approot:/BulletBook_sync.buj:/content";
-// 안드로이드와 같은 OneDrive 앱 폴더의 updates 안을 본다. Windows용은 zip으로
-// 올린다(예: BulletBook_windows_v0.38.0.zip). 이름에 windows가 들어간 zip만 고른다.
-const UPDATE_FOLDER_CHILDREN = "/me/drive/special/approot:/updates:/children";
+// Windows용 업데이트는 GitHub Releases에서 받는다(예: BulletBook_windows_v0.38.0.zip).
+// 공개 저장소라 익명으로 최신 릴리스를 조회할 수 있어 별도 토큰이 필요 없다.
+const GITHUB_API_ROOT = "https://api.github.com";
+const GITHUB_REPO = "msk92221-creator/BulletBook";
+const GITHUB_RELEASES_LATEST = `/repos/${GITHUB_REPO}/releases/latest`;
 const root = fileURLToPath(new URL(".", import.meta.url));
 const localDataRoot =
   process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local");
@@ -384,33 +386,55 @@ async function currentWindowsVersion() {
 
 async function findWindowsUpdate() {
   const current = await currentWindowsVersion();
-  let listing;
+  let release;
   try {
-    listing = await graphFetch(UPDATE_FOLDER_CHILDREN);
-  } catch (error) {
-    if (error?.status === 404) {
-      return { available: false, reason: "NO_FOLDER", currentVersion: current };
+    const response = await fetch(`${GITHUB_API_ROOT}${GITHUB_RELEASES_LATEST}`, {
+      headers: { "Accept": "application/vnd.github+json", "User-Agent": "BulletBook-Updater" },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (response.status === 404) {
+      return { available: false, reason: "NO_RELEASE", currentVersion: current };
     }
-    throw error;
+    if (!response.ok) {
+      throw new AppError(
+        "GitHub에서 업데이트를 확인하지 못했습니다.",
+        "GITHUB_ERROR",
+        502
+      );
+    }
+    release = await response.json();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(
+      "GitHub에 연결할 수 없습니다. 인터넷 연결을 확인해 주세요.",
+      "NETWORK_ERROR",
+      503
+    );
   }
-  const items = Array.isArray(listing?.value) ? listing.value : [];
+
+  // 릴리스에 올린 파일 중 이름에 windows가 들어간 zip을 고른다.
+  const assets = Array.isArray(release.assets) ? release.assets : [];
   let best = null;
-  for (const item of items) {
-    const name = String(item?.name || "");
+  for (const asset of assets) {
+    const name = String(asset.name || "");
     const lower = name.toLowerCase();
     if (!lower.endsWith(".zip") || !lower.includes("windows")) continue;
-    if (!best || versionScore(name) > versionScore(best.name)) best = item;
+    if (!best || versionScore(name) > versionScore(best.name)) best = asset;
   }
   if (!best) {
     return { available: false, reason: "NO_ZIP", currentVersion: current };
   }
+  // 릴리스의 태그(예: v0.38.0)에서 버전을 읽고, 없으면 파일명에서 본다.
+  const latestVersion =
+    (/(\d+\.\d+\.\d+)/.exec(release.tag_name || "") || [])[1] ||
+    (/(\d+\.\d+\.\d+)/.exec(best.name) || [])[1] || "";
   return {
-    available: versionScore(best.name) > versionScore(current),
+    available: versionScore(latestVersion) > versionScore(current),
     currentVersion: current,
     name: best.name,
-    itemId: best.id,
+    itemId: best.browser_download_url,
     size: Number(best.size) || 0,
-    latestVersion: (/(\d+\.\d+\.\d+)/.exec(best.name) || [])[1] || "",
+    latestVersion,
   };
 }
 
@@ -431,18 +455,17 @@ function runPowerShell(args) {
 
 // 실행 중인 폴더를 덮어쓰면 위험하므로, 형제 폴더에 새 버전을 풀어 놓고
 // 그 위치를 알려 준다. 사용자가 새 폴더의 시작 파일을 실행하면 된다.
+// itemId 자리에는 GitHub asset의 직접 다운로드 URL(browser_download_url)이 들어온다.
 async function applyWindowsUpdate(itemId) {
   if (!itemId) {
     throw new AppError("설치할 업데이트 파일이 없습니다.", "NO_ITEM", 400);
   }
-  const accessToken = await getAccessToken(false);
-  const response = await fetch(`${GRAPH_ROOT}/me/drive/items/${itemId}/content`, {
+  const response = await fetch(itemId, {
     redirect: "follow",
-    headers: { Authorization: `Bearer ${accessToken}` },
     signal: AbortSignal.timeout(300000),
   });
   if (!response.ok) {
-    throw new AppError("업데이트 파일을 내려받지 못했습니다.", "GRAPH_ERROR", 502);
+    throw new AppError("업데이트 파일을 내려받지 못했습니다.", "GITHUB_ERROR", 502);
   }
   const bytes = Buffer.from(await response.arrayBuffer());
 
@@ -466,8 +489,9 @@ async function applyWindowsUpdate(itemId) {
     source = join(extracted, directories[0].name);
   }
 
-  const info = await findWindowsUpdate();
-  const versionLabel = info.latestVersion || "new";
+  // 다운로드 URL이나 파일명에서 버전을 읽어 형제 폴더 이름을 정한다.
+  const versionLabel =
+    (/(\d+\.\d+\.\d+)/.exec(itemId) || [])[1] || "new";
   const destination = join(parent, `BulletBook_Windows_Android_v${versionLabel}`);
   if (resolve(destination) === resolve(root.replace(/[\\/]$/, ""))) {
     throw new AppError(
