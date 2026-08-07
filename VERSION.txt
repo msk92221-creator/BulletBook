@@ -1,0 +1,6 @@
+BulletBook Windows + Android
+Version 0.38.0
+
+Windows + Android source
+Document format: bulletbook v6 (.buj)
+OneDrive sync: Microsoft Graph account sync

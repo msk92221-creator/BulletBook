@@ -1,0 +1,9 @@
+{
+  "appId": "kr.co.bulletbook.app",
+  "appName": "BulletBook",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#f3f0e7"
+  }
+}

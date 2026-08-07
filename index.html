@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#161512">
+  <title>나의 불렛북</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <button type="button" id="sidebarToggle" class="icon-button mobile-only" title="목차 열기">☰</button>
+      <div class="brand">
+        <span class="brand-mark">B</span>
+        <div>
+          <input type="text" id="bookTitle" class="book-title" value="나의 불렛북" aria-label="책 제목">
+          <div class="save-state"><span id="saveDot"></span><span id="saveState">저장됨</span></div>
+        </div>
+      </div>
+      <button type="button" id="mobileMoreButton" class="icon-button mobile-app-only" title="더보기">⋮</button>
+      <div class="top-actions">
+        <div class="view-switch" role="group" aria-label="페이지 보기 방식">
+          <button type="button" data-view="single" title="한 쪽 보기">1쪽</button>
+          <button type="button" data-view="auto" class="active" title="창 크기에 맞춤">자동</button>
+          <button type="button" data-view="spread" title="두 쪽 보기">2쪽</button>
+        </div>
+        <button type="button" id="undoButton" class="icon-button" title="실행 취소 (Ctrl+Z)">↶</button>
+        <button type="button" id="redoButton" class="icon-button" title="다시 실행 (Ctrl+Y)">↷</button>
+        <button type="button" id="cloudButton" class="cloud-button" data-state="disconnected" title="Microsoft 계정의 OneDrive와 동기화">
+          <span aria-hidden="true">☁</span><span id="cloudLabel">동기화</span>
+        </button>
+        <button type="button" id="exportButton" class="quiet-button">파일 저장</button>
+        <button type="button" id="importButton" class="quiet-button">불러오기</button>
+        <button type="button" id="printButton" class="primary-button">PDF</button>
+        <input id="importInput" type="file" accept=".buj,.json,application/json" hidden>
+      </div>
+    </header>
+
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-section sidebar-header">
+        <div>
+          <p class="eyebrow">BOOK</p>
+          <h2>페이지</h2>
+        </div>
+        <div class="sidebar-header-actions">
+          <button type="button" id="addGroupButton" class="small-icon-button" title="페이지 그룹 추가">＋그룹</button>
+          <button type="button" id="closeSidebar" class="icon-button mobile-only">×</button>
+        </div>
+      </div>
+
+      <nav id="pageList" class="page-list" aria-label="페이지 목록"></nav>
+
+      <button type="button" id="sidebarListResizer" class="sidebar-list-resizer"
+        role="separator" aria-orientation="horizontal" aria-label="페이지 목록 높이 조절"
+        title="위아래로 드래그해 페이지 목록 높이 조절 · 두 번 누르면 초기화">
+        <span aria-hidden="true"></span>
+      </button>
+
+      <div id="sidebarTools" class="sidebar-tools">
+        <div class="sidebar-section templates">
+          <div class="section-title-row">
+            <div>
+              <p class="eyebrow">TEMPLATES</p>
+              <h3>페이지 추가</h3>
+            </div>
+          </div>
+          <p class="template-group-title">날짜 계획</p>
+          <div class="template-grid">
+            <button type="button" data-template="year-calendar-h1"><span>12</span>연간 달력</button>
+            <button type="button" data-template="monthly"><span>31</span>월간</button>
+            <button type="button" data-template="weekly-left"><span>W</span>주간</button>
+            <button type="button" data-template="daily"><span>D</span>일간</button>
+            <button type="button" data-template="daily-week"><span>7D</span>일간 1주</button>
+            <button type="button" data-template="future-h1"><span>6M</span>미래 기록</button>
+          </div>
+          <p class="template-group-title">목표·회고</p>
+          <div class="template-grid">
+            <button type="button" data-template="goals"><span>◎</span>목표</button>
+            <button type="button" data-template="life-map"><span>∞</span>인생 영역</button>
+            <button type="button" data-template="project"><span>P</span>프로젝트 계획</button>
+            <button type="button" data-template="feedback"><span>↺</span>회고</button>
+            <button type="button" data-template="tracker"><span>#</span>수치·습관</button>
+          </div>
+          <p class="template-group-title">자유</p>
+          <div class="template-grid">
+            <button type="button" data-template="blank"><span>□</span>빈 페이지</button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <label class="page-group-control">
+            <span>현재 페이지 그룹</span>
+            <select id="pageGroupSelect" aria-label="현재 페이지 그룹">
+              <option value="">그룹 없음</option>
+            </select>
+          </label>
+          <button type="button" id="cloudFileButton" class="full-button">Microsoft 계정 연결/변경</button>
+          <button type="button" id="cloudDisconnectButton" class="danger-link">Microsoft 계정 로그아웃</button>
+          <button type="button" id="recoveryButton" class="full-button">동기화 복구본</button>
+          <button type="button" id="desktopUpdateButton" class="full-button">앱 업데이트 확인</button>
+          <p id="desktopUpdateStatus" class="desktop-update-status"></p>
+          <button type="button" id="duplicatePage" class="full-button" disabled>선택한 페이지 복제</button>
+          <button type="button" id="deletePage" class="danger-link" disabled>선택한 페이지 삭제</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <section class="toolstrip" aria-label="편집 도구">
+        <button type="button" data-tool="select" class="tool active" title="선택 도구"><span class="tool-icon">↖</span><small>선택</small></button>
+        <button type="button" data-tool="text" class="tool" title="텍스트 박스 (T) · 빈 곳을 드래그해 생성"><span class="tool-icon">T</span><small>글자</small></button>
+        <button type="button" data-tool="pen" class="tool"><span class="tool-icon">✎</span><small>펜</small></button>
+        <button type="button" data-tool="highlight" class="tool"><span class="tool-icon highlight-icon">━</span><small>형광펜</small></button>
+        <button type="button" data-tool="line" class="tool"><span class="tool-icon">╱</span><small>선</small></button>
+        <button type="button" data-tool="eraser" class="tool"><span class="tool-icon">⌫</span><small>지우개</small></button>
+        <span class="tool-divider"></span>
+        <label class="color-control" title="색상">
+          <input id="colorPicker" type="color" value="#20201d">
+        </label>
+        <label class="size-control">
+          <span>굵기</span>
+          <input id="strokeSize" type="range" min="1" max="18" value="3">
+        </label>
+        <label class="font-size-control" title="선택한 텍스트의 글자 크기">
+          <span>글자</span>
+          <button type="button" id="fontSizeDown" class="font-size-step" aria-label="글자 크기 줄이기">−</button>
+          <input id="fontSize" type="number" min="4" max="120" step="0.5" value="18" inputmode="decimal">
+          <button type="button" id="fontSizeUp" class="font-size-step" aria-label="글자 크기 늘리기">＋</button>
+        </label>
+        <span class="tool-divider"></span>
+        <div class="bullet-palette" role="group" aria-label="불렛 종류와 계획 상태">
+          <span class="bullet-palette-label">계획</span>
+          <button type="button" data-bullet-base="dot" title="할 일 • (Alt+1)">•</button>
+          <button type="button" data-bullet-base="circle" title="일정·이벤트 ○ (Alt+2)">○</button>
+          <span class="bullet-palette-divider" aria-hidden="true"></span>
+          <span class="bullet-palette-label">기록</span>
+          <button type="button" data-bullet-base="memo" title="메모 − (Alt+6)">−</button>
+          <button type="button" data-bullet-base="idea" title="아이디어 + (Alt+7)">+</button>
+          <span class="bullet-palette-divider" aria-hidden="true"></span>
+          <span class="bullet-palette-label">상태</span>
+          <button type="button" data-bullet-status="migrated" title="다음으로 이월 > (Alt+3)">&gt;</button>
+          <button type="button" data-bullet-status="scheduled" title="날짜를 정해 예정 < (Alt+4)">&lt;</button>
+          <button type="button" data-bullet-status="completed" title="완료 × (Alt+5)">×</button>
+        </div>
+      </section>
+
+      <section id="bookViewport" class="book-viewport">
+        <button type="button" id="prevPage" class="page-nav prev" aria-label="이전 페이지">‹</button>
+        <div id="spread" class="spread" aria-live="polite"></div>
+        <button type="button" id="nextPage" class="page-nav next" aria-label="다음 페이지">›</button>
+      </section>
+
+      <footer class="statusbar">
+        <span id="pageStatus">1 / 1</span>
+        <span id="viewStatus">자동 · 두 쪽</span>
+        <span id="cloudStatus">Microsoft 계정 연결 안 됨</span>
+        <span class="status-hint">Alt+1~2 계획 · Alt+3~5 상태 · Alt+6~7 기록 · F2 편집 · Delete 삭제</span>
+      </footer>
+    </main>
+  </div>
+
+  <div id="sidebarScrim" class="sidebar-scrim"></div>
+  <div id="toast" class="toast" role="status"></div>
+  <div id="printBook" class="print-book" aria-hidden="true"></div>
+
+  <dialog id="welcomeDialog" class="welcome-dialog">
+    <div class="welcome-art">
+      <div class="mini-book">
+        <div></div><div></div>
+      </div>
+    </div>
+    <div class="welcome-copy">
+      <p class="eyebrow">WELCOME TO BULLET BOOK</p>
+      <h1>종이처럼 자유롭게,<br>책처럼 차곡차곡.</h1>
+      <p>모눈 페이지를 클릭해 글을 쓰거나 펜으로 기록하세요. 템플릿에 인쇄된 제목과 날짜도 직접 바꿀 수 있습니다.</p>
+      <ul>
+        <li><b>글자</b> 도구로 원하는 크기만큼 드래그해 입력</li>
+        <li><b>글자</b> 도구로 월·날짜·제목을 클릭해 수정</li>
+        <li><b>펜·형광펜</b>으로 자유롭게 필기</li>
+        <li><b>파일 저장</b>으로 <code>.buj</code> 백업</li>
+      </ul>
+      <button type="button" id="startButton" class="primary-button large">불렛북 시작하기</button>
+    </div>
+  </dialog>
+
+  <dialog id="cloudConnectDialog" class="cloud-connect-dialog">
+    <p class="eyebrow">ONEDRIVE SYNC</p>
+    <h2>Microsoft 계정 연결</h2>
+    <p>처음 한 번만 로그인하면 저장 위치를 묻지 않고 Windows와 Android의 최신 내용을 자동으로 맞춥니다.</p>
+    <div id="cloudDevicePanel" class="cloud-device-panel" hidden>
+      <span>로그인 페이지에 입력할 코드</span>
+      <strong id="cloudDeviceCode">----</strong>
+      <a id="cloudDeviceLink" href="https://microsoft.com/devicelogin" target="_blank" rel="noreferrer">Microsoft 로그인 페이지 열기</a>
+      <small>BulletBook은 클립보드를 사용하지 않습니다. 필요하면 브라우저 입력란에 화면의 코드를 직접 입력하세요.</small>
+    </div>
+    <div class="cloud-connect-actions">
+      <button type="button" id="cloudLoginButton" class="cloud-choice-button primary-choice">Microsoft 계정으로 로그인</button>
+      <button type="button" id="cloudCancelButton" class="cloud-cancel-button">취소</button>
+    </div>
+  </dialog>
+
+  <dialog id="groupEditDialog" class="group-edit-dialog">
+    <header class="sheet-header">
+      <div><p class="eyebrow">PAGE GROUP</p><h2>페이지 그룹 편집</h2></div>
+      <button type="button" id="groupEditCloseButton" class="icon-button" aria-label="닫기">×</button>
+    </header>
+    <form id="groupEditForm" class="group-edit-form">
+      <label class="mobile-write-field">
+        <span>그룹 이름</span>
+        <input id="groupEditName" type="text" maxlength="40" autocomplete="off" required>
+      </label>
+      <label class="mobile-write-field">
+        <span>상위 그룹</span>
+        <select id="groupEditParent"></select>
+      </label>
+      <p class="group-edit-note">상위 그룹을 선택하면 그룹 안에 그룹을 만들 수 있습니다. 삭제해도 페이지와 하위 그룹은 함께 삭제되지 않습니다.</p>
+      <div class="group-edit-actions">
+        <button type="button" id="groupEditDeleteButton" class="danger-button">그룹 삭제</button>
+        <button type="submit" class="primary-button">이름 저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="mobileSearchDialog" class="mobile-search-dialog">
+    <header class="sheet-header">
+      <div><p class="eyebrow">SEARCH</p><h2>불렛북 검색</h2></div>
+      <button type="button" id="mobileSearchCloseButton" class="icon-button" aria-label="닫기">×</button>
+    </header>
+    <input id="mobileSearchInput" class="mobile-search-input" type="search" placeholder="내용, #태그, 페이지 검색">
+    <div id="mobileSearchResults" class="mobile-search-results"></div>
+  </dialog>
+
+  <dialog id="mobileMoreDialog" class="mobile-more-dialog">
+    <header class="sheet-header">
+      <div><p class="eyebrow">MORE</p><h2>더보기</h2></div>
+      <button type="button" id="mobileMoreCloseButton" class="icon-button" aria-label="닫기">×</button>
+    </header>
+    <div class="mobile-more-content">
+      <section class="mobile-view-setting" aria-label="페이지 보기 방식">
+        <div>
+          <strong>페이지 보기</strong>
+          <small>자동은 Fold를 접으면 1쪽, 펼치면 2쪽으로 바뀝니다.</small>
+        </div>
+        <div class="mobile-view-switch" role="group" aria-label="페이지 보기 방식 선택">
+          <button type="button" data-view="auto" class="active">자동</button>
+          <button type="button" data-view="single">1쪽</button>
+          <button type="button" data-view="spread">2쪽</button>
+        </div>
+      </section>
+      <section class="mobile-more-section" aria-labelledby="mobileMoreEditTitle">
+        <h3 id="mobileMoreEditTitle" class="mobile-more-section-title">편집</h3>
+        <div class="mobile-more-actions">
+          <button type="button" id="mobileAdvancedToggle" class="mobile-menu-action">Windows식 고급 편집 켜기</button>
+        </div>
+      </section>
+      <section class="mobile-more-section" aria-labelledby="mobileMoreSyncTitle">
+        <h3 id="mobileMoreSyncTitle" class="mobile-more-section-title">동기화·백업</h3>
+        <div class="mobile-more-actions">
+          <button type="button" id="mobileSyncButton" class="mobile-menu-action">지금 동기화</button>
+          <button type="button" id="mobileExportButton" class="mobile-menu-action">불렛북 파일 저장</button>
+          <button type="button" id="mobileRecoveryButton" class="mobile-menu-action">동기화 복구본</button>
+        </div>
+      </section>
+      <section class="mobile-more-section" aria-labelledby="mobileMoreUpdateTitle">
+        <h3 id="mobileMoreUpdateTitle" class="mobile-more-section-title">앱 업데이트</h3>
+        <div class="mobile-more-actions">
+          <button type="button" id="mobileUpdateButton" class="mobile-menu-action">업데이트 확인</button>
+        </div>
+        <p id="mobileUpdateStatus" class="mobile-update-status">OneDrive의 <b>앱 &gt; BulletBook &gt; updates</b> 폴더에 APK를 올려두면 여기서 바로 설치할 수 있습니다.</p>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="goalHubDialog" class="goal-hub-dialog">
+    <header class="sheet-header">
+      <div><p class="eyebrow">LIFE MISSION</p><h2>목표·미션 관리</h2></div>
+      <button type="button" id="goalHubCloseButton" class="icon-button" aria-label="닫기">×</button>
+    </header>
+    <p class="goal-hub-description">인생 영역 아래에 결과 목표를 만들고, 반복 미션을 오늘의 일간 계획으로 받습니다.</p>
+    <div class="goal-hub-actions">
+      <button type="button" id="receiveTodayMissionsButton" class="primary-button">오늘 미션 받기</button>
+      <button type="button" id="addLifeAreaButton" class="quiet-button">＋ 인생 영역</button>
+      <button type="button" id="openLifeMapButton" class="quiet-button">인생 영역 지도 열기</button>
+    </div>
+    <div id="goalHubSummary" class="goal-hub-summary"></div>
+    <div id="goalHubList" class="goal-hub-list"></div>
+  </dialog>
+
+  <dialog id="goalEditorDialog" class="goal-editor-dialog">
+    <header class="sheet-header">
+      <div><p id="goalEditorEyebrow" class="eyebrow">LIFE AREA</p><h2 id="goalEditorTitle">인생 영역 추가</h2></div>
+      <button type="button" id="goalEditorCloseButton" class="icon-button" aria-label="닫기">×</button>
+    </header>
+    <form id="goalEditorForm" class="goal-editor-form">
+      <section id="areaEditorFields" class="goal-editor-fields">
+        <label class="mobile-write-field"><span>인생 영역 이름</span><input id="areaEditorName" type="text" maxlength="40" placeholder="예: 건강관리" required></label>
+        <label class="mobile-write-field"><span>유지 기준·의미</span><textarea id="areaEditorPurpose" rows="3" maxlength="240" placeholder="이 영역을 왜 관리하며, 어떤 상태를 유지할 것인지"></textarea></label>
+      </section>
+
+      <section id="outcomeEditorFields" class="goal-editor-fields" hidden>
+        <label class="mobile-write-field"><span>인생 영역</span><select id="outcomeEditorArea"></select></label>
+        <label class="mobile-write-field"><span>결과 목표</span><input id="outcomeEditorTitle" type="text" maxlength="80" placeholder="예: 12주 동안 목표 체중 달성" required></label>
+        <label class="mobile-write-field"><span>달성 기준</span><textarea id="outcomeEditorResult" rows="3" maxlength="320" placeholder="완료됐다고 판단할 구체적인 결과"></textarea></label>
+        <div class="goal-metric-grid">
+          <label class="mobile-write-field"><span>측정 지표</span><input id="outcomeEditorMetric" type="text" maxlength="30" placeholder="예: 체중"></label>
+          <label class="mobile-write-field"><span>단위</span><input id="outcomeEditorUnit" type="text" maxlength="12" placeholder="예: kg"></label>
+          <label class="mobile-write-field"><span>시작값</span><input id="outcomeEditorStart" type="number" step="any" inputmode="decimal"></label>
+          <label class="mobile-write-field"><span>현재값</span><input id="outcomeEditorCurrent" type="number" step="any" inputmode="decimal"></label>
+          <label class="mobile-write-field"><span>목표값</span><input id="outcomeEditorTarget" type="number" step="any" inputmode="decimal"></label>
+          <label class="mobile-write-field"><span>기한</span><input id="outcomeEditorDue" type="date"></label>
+        </div>
+        <label class="mobile-write-field"><span>상태</span><select id="outcomeEditorStatus"><option value="active">진행 중</option><option value="paused">잠시 멈춤</option><option value="completed">달성</option></select></label>
+      </section>
+
+      <section id="missionEditorFields" class="goal-editor-fields" hidden>
+        <label class="mobile-write-field"><span>연결할 결과 목표</span><select id="missionEditorGoal"></select></label>
+        <label class="mobile-write-field"><span>미션 내용</span><input id="missionEditorTitle" type="text" maxlength="100" placeholder="예: 만 보 걷기" required></label>
+        <label class="mobile-write-field"><span>불렛 종류</span>
+          <select id="missionEditorBulletBase">
+            <option value="dot">• 할 일</option>
+            <option value="circle">○ 일정</option>
+            <option value="memo">− 메모</option>
+            <option value="idea">+ 아이디어</option>
+          </select>
+        </label>
+        <label class="mobile-write-field"><span>반복 방식</span>
+          <select id="missionEditorSchedule">
+            <option value="daily">매일</option>
+            <option value="weekly">주간 횟수</option>
+            <option value="weekdays">평일</option>
+            <option value="weekend">주말</option>
+            <option value="custom">요일 선택</option>
+            <option value="monthly-date">매월 특정 날짜</option>
+            <option value="monthly-last">매월 마지막 날</option>
+            <option value="yearly-date">매년 특정 날짜</option>
+            <option value="interval">자유 간격(며칠·몇 주·몇 개월·몇 년마다)</option>
+            <option value="once">한 번만</option>
+          </select>
+        </label>
+        <label id="missionWeeklyTargetField" class="mobile-write-field" hidden><span>일주일 목표 횟수</span><input id="missionEditorWeeklyTarget" type="number" min="1" max="7" value="3" inputmode="numeric"></label>
+        <label id="missionOnceDateField" class="mobile-write-field" hidden><span>실행 날짜</span><input id="missionEditorDate" type="date"></label>
+        <fieldset id="missionWeekdayField" class="mission-weekday-field" hidden>
+          <legend>실행 요일</legend>
+          <div>
+            <label><input type="checkbox" value="1">월</label><label><input type="checkbox" value="2">화</label><label><input type="checkbox" value="3">수</label><label><input type="checkbox" value="4">목</label><label><input type="checkbox" value="5">금</label><label><input type="checkbox" value="6">토</label><label><input type="checkbox" value="0">일</label>
+          </div>
+        </fieldset>
+        <label id="missionMonthDayField" class="mobile-write-field" hidden><span>매월 며칠</span><input id="missionEditorMonthDay" type="number" min="1" max="31" value="1" inputmode="numeric"></label>
+        <label id="missionYearlyField" class="mobile-write-field" hidden><span>매년 날짜 (연도는 무시됩니다)</span><input id="missionEditorYearlyDate" type="date"></label>
+        <div id="missionIntervalField" class="mission-interval-field" hidden>
+          <label class="mobile-write-field"><span>시작일</span><input id="missionEditorIntervalStart" type="date"></label>
+          <div class="mission-interval-count-row">
+            <label class="mobile-write-field"><span>간격</span><input id="missionEditorIntervalCount" type="number" min="1" max="999" value="1" inputmode="numeric"></label>
+            <label class="mobile-write-field"><span>단위</span>
+              <select id="missionEditorIntervalUnit">
+                <option value="day">일마다</option>
+                <option value="week">주마다</option>
+                <option value="month">개월마다</option>
+                <option value="year">년마다</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <label class="goal-active-check"><input id="missionEditorActive" type="checkbox" checked><span>오늘 미션 생성에 사용</span></label>
+      </section>
+
+      <div class="goal-editor-actions">
+        <button type="button" id="goalEditorDeleteButton" class="danger-button" hidden>삭제</button>
+        <button type="submit" class="primary-button">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="recoveryDialog" class="recovery-dialog">
+    <header class="sheet-header">
+      <div><p class="eyebrow">SYNC RECOVERY</p><h2>동기화 복구본</h2></div>
+      <button type="button" id="recoveryCloseButton" class="icon-button" aria-label="닫기">×</button>
+    </header>
+    <p class="recovery-description">동기화로 책을 교체하거나 합치기 전에 자동으로 보존한 사본입니다. 복원 전 현재 책도 다시 복구본으로 저장됩니다.</p>
+    <div id="recoveryList" class="recovery-list"></div>
+  </dialog>
+
+  <dialog id="calendarEventDialog" class="calendar-event-dialog">
+    <header class="sheet-header">
+      <div><p class="eyebrow">CALENDAR EVENT</p><h2 id="calendarEventTitle">날짜 일정</h2></div>
+      <button type="button" id="calendarEventCloseButton" class="icon-button" aria-label="닫기">×</button>
+    </header>
+    <form id="calendarEventForm" class="calendar-event-form">
+      <p class="calendar-event-description">○ 일정만 연간·월간·주간·일간 계획에 함께 표시됩니다.</p>
+      <div id="calendarEventRows" class="calendar-event-rows"></div>
+      <button type="button" id="calendarEventAddButton" class="full-button">＋ 일정 추가</button>
+      <button type="submit" class="primary-button">일정 저장</button>
+    </form>
+  </dialog>
+
+  <dialog id="mobilePageWriteDialog" class="mobile-page-write-dialog">
+    <header class="sheet-header">
+      <div><p id="mobilePageWriteEyebrow" class="eyebrow">PAGE WRITE</p><h2 id="mobilePageWriteTitle">현재 페이지에 쓰기</h2></div>
+      <button type="button" id="mobilePageWriteCloseButton" class="icon-button" aria-label="닫기">×</button>
+    </header>
+    <form id="mobilePageWriteForm" class="mobile-page-write-form">
+      <div id="mobilePageWriteContext" class="mobile-write-context">
+        <span id="mobilePageWriteContextIcon">✎</span>
+        <div>
+          <strong id="mobilePageWriteContextTitle">현재 페이지</strong>
+          <small id="mobilePageWriteContextDescription">페이지 형식에 맞는 칸을 골라 기록합니다.</small>
+        </div>
+      </div>
+      <div class="mobile-write-mode-switch" role="group" aria-label="쓰기 방식">
+        <button type="button" data-write-mode="once" class="active">한 번 쓰기</button>
+        <button type="button" data-write-mode="routine">루틴 만들기</button>
+      </div>
+      <div id="mobileWriteOnceFields">
+        <label class="mobile-write-field">
+          <span>기록할 페이지</span>
+          <select id="mobilePageWritePageSelect"></select>
+        </label>
+        <label id="mobilePageWriteWeekField" class="mobile-write-field" hidden>
+          <span>몇 주차</span>
+          <input id="mobilePageWriteWeekNumber" type="text" inputmode="numeric" maxlength="12" placeholder="예: 31">
+        </label>
+        <label id="mobilePageWriteWeekStartField" class="mobile-write-field" hidden>
+          <span>주간 시작일(월요일)</span>
+          <input id="mobilePageWriteWeekStart" type="date">
+        </label>
+        <fieldset class="mobile-write-target-field">
+          <legend id="mobilePageWriteTargetLegend">기록할 칸</legend>
+          <div id="mobilePageWriteTargets" class="mobile-write-targets"></div>
+        </fieldset>
+        <label id="mobilePageWriteDetailField" class="mobile-write-field" hidden>
+          <span id="mobilePageWriteDetailLabel">날짜</span>
+          <select id="mobilePageWriteDetailSelect"></select>
+        </label>
+      </div>
+      <fieldset class="mobile-write-symbol-field">
+        <legend>불렛 종류</legend>
+        <div class="mobile-write-symbols">
+          <button type="button" data-mobile-write-symbol="•" class="active">• 할 일</button>
+          <button type="button" data-mobile-write-symbol="○">○ 일정</button>
+          <button type="button" data-mobile-write-symbol="−">− 메모</button>
+          <button type="button" data-mobile-write-symbol="+">+ 아이디어</button>
+        </div>
+      </fieldset>
+      <div id="mobileWriteRoutineFields" class="mobile-write-routine-fields" hidden>
+        <button type="button" id="mobileWriteOpenRoutineListButton" class="quiet-button mobile-write-routine-list-button">↗ 만든 루틴 모두 보기·편집</button>
+        <label class="mobile-write-field"><span>반복 방식</span>
+          <select id="mobileRoutineSchedule">
+            <option value="daily">매일</option>
+            <option value="weekly">주간 횟수</option>
+            <option value="weekdays">평일</option>
+            <option value="weekend">주말</option>
+            <option value="custom">요일 선택</option>
+            <option value="monthly-date">매월 특정 날짜</option>
+            <option value="monthly-last">매월 마지막 날</option>
+            <option value="yearly-date">매년 특정 날짜</option>
+            <option value="interval">자유 간격(며칠·몇 주·몇 개월·몇 년마다)</option>
+            <option value="once">한 번만</option>
+          </select>
+        </label>
+        <label id="mobileRoutineWeeklyTargetField" class="mobile-write-field" hidden><span>일주일 목표 횟수</span><input id="mobileRoutineWeeklyTarget" type="number" min="1" max="7" value="3" inputmode="numeric"></label>
+        <label id="mobileRoutineOnceDateField" class="mobile-write-field" hidden><span>실행 날짜</span><input id="mobileRoutineDate" type="date"></label>
+        <fieldset id="mobileRoutineWeekdayField" class="mission-weekday-field" hidden>
+          <legend>실행 요일</legend>
+          <div>
+            <label><input type="checkbox" value="1">월</label><label><input type="checkbox" value="2">화</label><label><input type="checkbox" value="3">수</label><label><input type="checkbox" value="4">목</label><label><input type="checkbox" value="5">금</label><label><input type="checkbox" value="6">토</label><label><input type="checkbox" value="0">일</label>
+          </div>
+        </fieldset>
+        <label id="mobileRoutineMonthDayField" class="mobile-write-field" hidden><span>매월 며칠</span><input id="mobileRoutineMonthDay" type="number" min="1" max="31" value="1" inputmode="numeric"></label>
+        <label id="mobileRoutineYearlyField" class="mobile-write-field" hidden><span>매년 날짜 (연도는 무시됩니다)</span><input id="mobileRoutineYearlyDate" type="date"></label>
+        <div id="mobileRoutineIntervalField" class="mission-interval-field" hidden>
+          <label class="mobile-write-field"><span>시작일</span><input id="mobileRoutineIntervalStart" type="date"></label>
+          <div class="mission-interval-count-row">
+            <label class="mobile-write-field"><span>간격</span><input id="mobileRoutineIntervalCount" type="number" min="1" max="999" value="1" inputmode="numeric"></label>
+            <label class="mobile-write-field"><span>단위</span>
+              <select id="mobileRoutineIntervalUnit">
+                <option value="day">일마다</option>
+                <option value="week">주마다</option>
+                <option value="month">개월마다</option>
+                <option value="year">년마다</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+      <label class="mobile-write-field">
+        <span id="mobilePageWriteContentLabel">내용</span>
+        <textarea id="mobilePageWriteInput" rows="4" placeholder="박스를 만들 필요 없이 내용만 입력하세요"></textarea>
+      </label>
+      <p id="mobilePageWriteHint" class="mobile-write-hint"></p>
+      <button id="mobilePageWriteSubmit" type="submit" class="primary-button mobile-write-submit">현재 페이지에 추가</button>
+    </form>
+  </dialog>
+
+  <dialog id="mobileTextContextDialog" class="mobile-text-context-dialog">
+    <header class="sheet-header">
+      <div><p class="eyebrow">TEXT BOX</p><h2>텍스트 박스 메뉴</h2></div>
+      <button type="button" id="mobileTextContextCloseButton" class="icon-button" aria-label="닫기">×</button>
+    </header>
+    <div class="mobile-text-context-body">
+      <label class="mobile-write-field">
+        <span>텍스트 수정</span>
+        <textarea id="mobileTextContextInput" rows="4"></textarea>
+      </label>
+      <div class="mobile-text-font-row">
+        <span>글자 크기</span>
+        <button type="button" id="mobileTextFontDown" aria-label="글자 작게">−</button>
+        <input id="mobileTextContextFontSize" type="number" min="4" max="120" step="1" inputmode="numeric">
+        <button type="button" id="mobileTextFontUp" aria-label="글자 크게">＋</button>
+      </div>
+      <fieldset class="mobile-context-bullet-field">
+        <legend>불렛 종류와 계획 상태</legend>
+        <div class="mobile-context-bullet-row kind-row">
+          <span>종류</span>
+          <div class="mobile-context-kind-buttons">
+            <button type="button" data-mobile-bullet-base="dot">• 할 일</button>
+            <button type="button" data-mobile-bullet-base="circle">○ 일정</button>
+            <button type="button" data-mobile-bullet-base="memo">− 메모</button>
+            <button type="button" data-mobile-bullet-base="idea">+ 아이디어</button>
+          </div>
+        </div>
+        <div class="mobile-context-bullet-row status-row">
+          <span>상태</span>
+          <button type="button" data-mobile-bullet-status="migrated">&gt; 이월</button>
+          <button type="button" data-mobile-bullet-status="scheduled">&lt; 예정</button>
+          <button type="button" data-mobile-bullet-status="completed">× 완료</button>
+        </div>
+        <small>상태는 •와 ○에만 적용됩니다. 상태를 지우려면 계획 종류를 다시 누르세요.</small>
+      </fieldset>
+      <button type="button" id="mobileTextContextEditRoutineButton" class="quiet-button mobile-context-edit-routine" hidden>↻ 이 루틴의 반복 방식 편집</button>
+      <button type="button" id="mobileTextContextSaveButton" class="primary-button mobile-context-save">수정 적용</button>
+      <div class="mobile-context-actions">
+        <button type="button" id="mobileTextContextDuplicateButton"><span>▣</span>복제</button>
+        <button type="button" id="mobileTextContextCopyButton"><span>⧉</span>복사</button>
+        <button type="button" id="mobileTextContextPasteButton"><span>▤</span>붙여넣기</button>
+        <button type="button" id="mobileTextContextCutButton"><span>✂</span>잘라내기</button>
+        <button type="button" id="mobileTextContextFrontButton"><span>⬆</span>맨 앞으로</button>
+        <button type="button" id="mobileTextContextBackButton"><span>⬇</span>맨 뒤로</button>
+        <button type="button" id="mobileTextContextDeleteButton" class="danger"><span>⌫</span>삭제</button>
+      </div>
+      <p class="mobile-context-tip">한 손가락으로 끌면 모눈 한 칸 단위로 이동하고, 길게 누르면 이 메뉴가 열립니다.</p>
+    </div>
+  </dialog>
+
+  <nav class="mobile-bottom-nav mobile-app-only" aria-label="모바일 메뉴">
+    <button type="button" id="mobileTodayButton"><span>◷</span><small>오늘</small></button>
+    <button type="button" id="mobilePageWriteButton" class="page-write-nav-button"><span>✎</span><small>현재 페이지 쓰기</small></button>
+    <button type="button" id="mobilePagesButton"><span>▤</span><small>페이지</small></button>
+    <button type="button" id="mobileSearchButton"><span>⌕</span><small>검색</small></button>
+    <button type="button" id="mobileMoreNavButton"><span>⋯</span><small>더보기</small></button>
+  </nav>
+
+  <script src="cloud-sync.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
