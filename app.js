@@ -6682,8 +6682,8 @@
     else if (daily.created) showToast("오늘의 일간 페이지를 만들었습니다");
   }
 
-  // OneDrive 앱 폴더의 updates 안에서 새 APK를 찾아 설치까지 이어 준다.
-  // 파일 이름의 버전(예: BulletBook_v0.37.0.apk)을 지금 버전과 비교한다.
+  // GitHub Releases의 최신 릴리스에서 새 APK를 찾아 설치까지 이어 준다.
+  // 파일 이름의 버전(예: BulletBook_v0.38.0.apk)을 지금 버전과 비교한다.
   let updateCheckBusy = false;
 
   function setUpdateStatus(message) {
@@ -6699,15 +6699,15 @@
     if (updateCheckBusy) return;
     updateCheckBusy = true;
     refs.mobileUpdateButton.disabled = true;
-    setUpdateStatus("OneDrive에서 새 버전을 확인하는 중…");
+    setUpdateStatus("GitHub에서 새 버전을 확인하는 중…");
     try {
       const info = await api.check();
-      if (info.reason === "NO_FOLDER") {
-        setUpdateStatus("OneDrive 앱 > BulletBook 안에 updates 폴더를 만들고 APK를 올려 주세요.");
+      if (info.reason === "NO_RELEASE") {
+        setUpdateStatus("아직 GitHub에 릴리스가 없습니다.");
         return;
       }
       if (info.reason === "NO_APK") {
-        setUpdateStatus("updates 폴더에 APK 파일이 없습니다.");
+        setUpdateStatus("릴리스에 APK 파일이 없습니다.");
         return;
       }
       if (!info.available) {
@@ -6726,7 +6726,7 @@
     }
   }
 
-  // Windows: OneDrive updates 폴더의 windows zip을 받아 형제 폴더에 풀어 둔다.
+  // Windows: GitHub Releases의 windows zip을 받아 형제 폴더에 풀어 둔다.
   // 실행 중인 폴더를 덮어쓰지 않으므로 안전하고, 새 폴더 위치를 알려 준다.
   let desktopUpdateBusy = false;
 
@@ -6738,15 +6738,15 @@
     if (isAndroidApp || desktopUpdateBusy) return;
     desktopUpdateBusy = true;
     refs.desktopUpdateButton.disabled = true;
-    setDesktopUpdateStatus("OneDrive에서 새 버전을 확인하는 중…");
+    setDesktopUpdateStatus("GitHub에서 새 버전을 확인하는 중…");
     try {
       const info = await (await fetch("/api/update/check")).json();
-      if (info.reason === "NO_FOLDER") {
-        setDesktopUpdateStatus("OneDrive 앱 > BulletBook 안에 updates 폴더를 만들어 주세요.");
+      if (info.reason === "NO_RELEASE") {
+        setDesktopUpdateStatus("아직 GitHub에 릴리스가 없습니다.");
         return;
       }
       if (info.reason === "NO_ZIP") {
-        setDesktopUpdateStatus("updates 폴더에 windows zip 파일이 없습니다.");
+        setDesktopUpdateStatus("릴리스에 windows zip 파일이 없습니다.");
         return;
       }
       if (!info.available) {
