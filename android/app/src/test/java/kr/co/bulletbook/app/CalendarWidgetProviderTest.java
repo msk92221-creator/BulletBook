@@ -20,13 +20,39 @@ public class CalendarWidgetProviderTest {
     }
 
     @Test
+    public void monthNavigationCrossesYearBoundaries() {
+        assertEquals(
+            YearMonth.of(2025, 12),
+            CalendarWidgetProvider.shiftMonth(YearMonth.of(2026, 1), -1)
+        );
+        assertEquals(
+            YearMonth.of(2027, 1),
+            CalendarWidgetProvider.shiftMonth(YearMonth.of(2026, 12), 1)
+        );
+    }
+
+    @Test
+    public void invalidStoredMonthFallsBackSafely() {
+        YearMonth fallback = YearMonth.of(2026, 8);
+
+        assertEquals(
+            YearMonth.of(2026, 7),
+            CalendarWidgetProvider.parseDisplayedMonth("2026-07", fallback)
+        );
+        assertEquals(
+            fallback,
+            CalendarWidgetProvider.parseDisplayedMonth("잘못된 값", fallback)
+        );
+    }
+
+    @Test
     public void eventSummaryShowsTitlesAndRemainingCount() {
         CalendarWidgetProvider.DayCount count = new CalendarWidgetProvider.DayCount();
         count.open = 4;
-        count.items.add("○ 첫 일정");
-        count.items.add("○ 둘째 일정");
-        count.items.add("○ 셋째 일정");
+        count.items.add("첫째 일정");
+        count.items.add("둘째 일정");
+        count.items.add("셋째 일정");
 
-        assertEquals("○ 첫 일정\n○ 둘째 일정\n+2", CalendarWidgetProvider.eventSummary(count));
+        assertEquals("첫째 일정\n둘째 일정\n+2", CalendarWidgetProvider.eventSummary(count));
     }
 }
