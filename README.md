@@ -1,4 +1,4 @@
-# BulletBook 0.39.2
+# BulletBook 0.39.3
 
 종이에 작성하던 불렛저널을 모눈 페이지 기반의 편집 가능한 전자책으로 옮긴 Windows·Android 공통 버전입니다.
 

@@ -2655,10 +2655,14 @@
     const weeklyPairIds = new Set(book.pages
       .filter(page => sourceSet.has(page.id) && isWeeklyPage(page) && page.weeklyPairId)
       .map(page => page.weeklyPairId));
+    const calendarPairIds = new Set(book.pages
+      .filter(page => sourceSet.has(page.id) && page.calendarPairId)
+      .map(page => page.calendarPairId));
     return book.pages
       .filter(page => page.type !== "cover" && (
         sourceSet.has(page.id) ||
-        (isWeeklyPage(page) && weeklyPairIds.has(page.weeklyPairId))
+        (isWeeklyPage(page) && weeklyPairIds.has(page.weeklyPairId)) ||
+        (page.calendarPairId && calendarPairIds.has(page.calendarPairId))
       ))
       .map(page => page.id);
   }
@@ -2724,7 +2728,7 @@
       const group = book.groups.find(item => item.id === target.dataset.groupId);
       if (!group) return null;
       target.classList.add("page-group-drop-target");
-      return { groupId: group.id };
+      return { groupId: group.id, atStart: true };
     }
 
     const targetPage = book.pages.find(page => page.id === target.dataset.pageId);
@@ -2932,7 +2936,7 @@
     return reorderPagesFromList([sourceId], targetId, after);
   }
 
-  function movePagesIntoGroup(sourceIds, groupId) {
+  function movePagesIntoGroup(sourceIds, groupId, atStart = false) {
     const orderedIds = orderedMovablePageIds(sourceIds);
     const sourceSet = new Set(orderedIds);
     const group = book.groups.find(item => item.id === groupId);
@@ -2942,11 +2946,16 @@
     const remainingPages = book.pages.filter(page => !sourceSet.has(page.id));
     movedPages.forEach(page => page.groupId = group.id);
     const targetGroupIds = groupDescendantIdSet(group.id);
-    let insertIndex = -1;
-    remainingPages.forEach((page, index) => {
-      if (targetGroupIds.has(page.groupId)) insertIndex = index + 1;
-    });
-    // 비어 있는 그룹이면 원래 쪽 위치를 유지하고, 기존 그룹이면 마지막 쪽 바로 뒤에 붙인다.
+    let insertIndex = atStart
+      ? remainingPages.findIndex(page => targetGroupIds.has(page.groupId))
+      : -1;
+    if (!atStart) {
+      remainingPages.forEach((page, index) => {
+        if (targetGroupIds.has(page.groupId)) insertIndex = index + 1;
+      });
+    }
+    // 비어 있는 그룹이면 원래 쪽 위치를 유지한다. 그룹 헤더에 놓으면 맨 앞,
+    // 그룹 선택 메뉴로 넣으면 기존처럼 맨 뒤에 붙인다.
     if (insertIndex < 0) {
       insertIndex = Math.min(Math.max(1, Math.min(...sourceIndexes)), remainingPages.length);
     }
@@ -2960,8 +2969,8 @@
     commitHistory();
     renderAll();
     showToast(orderedIds.length > 1
-      ? `${orderedIds.length}개 페이지를 "${group.name}" 그룹에 넣었습니다`
-      : `페이지를 "${group.name}" 그룹에 넣었습니다`);
+      ? `${orderedIds.length}개 페이지를 "${group.name}" 그룹${atStart ? " 맨 위" : ""}에 넣었습니다`
+      : `페이지를 "${group.name}" 그룹${atStart ? " 맨 위" : ""}에 넣었습니다`);
     return true;
   }
 
@@ -2971,7 +2980,7 @@
 
   function applyPageListDrop(sourceIds, drop) {
     if (!drop) return false;
-    if (drop.groupId) return movePagesIntoGroup(sourceIds, drop.groupId);
+    if (drop.groupId) return movePagesIntoGroup(sourceIds, drop.groupId, drop.atStart === true);
     return reorderPagesFromList(sourceIds, drop.targetId, drop.after);
   }
 
@@ -8785,13 +8794,18 @@
     window.__bulletBookOpenWidgetDate = value => {
       const date = dateFromIso(value);
       if (!date) return;
-      const { page } = ensureDailyPage(date);
-      if (page) navigateToBookPage(page);
+      const result = ensureDailyPage(date);
+      if (result.created) commitHistory();
+      if (result.page) {
+        navigateToBookPage(result.page);
+        requestAnimationFrame(() => openCalendarEventEditor(value));
+      }
     };
     window.__bulletBookOpenWidgetMonth = value => {
       const match = /^(\d{4})-(\d{1,2})$/.exec(String(value || ""));
       if (!match) return;
       const result = ensureMonthlyPage(Number(match[1]), Number(match[2]));
+      if (result?.created) commitHistory();
       if (result?.page) navigateToBookPage(result.page);
     };
     window.addEventListener("afterprint", () => { refs.printBook.innerHTML = ""; });

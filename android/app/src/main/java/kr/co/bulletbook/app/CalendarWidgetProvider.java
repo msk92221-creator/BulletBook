@@ -26,34 +26,61 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 홈 화면 1개월 캘린더 위젯.
+ * 홈 화면 한 달 달력 위젯.
  *
- * 데이터는 MainActivity의 CloudAccountBridge가 SharedPreferences의
- * "calendar_widget_v1_json" 키로 저장한 위젯 전용 snapshot에서 읽는다.
- * snapshot 형식:
- *   {"version":2,"updatedAt":"...","days":{"2026-08-08":{
- *     "open":2,"completed":1,"items":["○ 일정","✓ 완료"]
- *   }}}
- *
- * 위젯은 보기 전용이며 날짜·월·오늘 클릭 시 MainActivity로 Intent를 보낸다.
+ * 데이터는 MainActivity의 CloudAccountBridge가 SharedPreferences에 저장한
+ * calendar_widget_v1_json 스냅샷에서 읽는다. 날짜를 누르면 해당 일간 계획과
+ * 일정 편집기를 열고, 월 제목을 누르면 월간 계획을 연다.
  */
 public class CalendarWidgetProvider extends AppWidgetProvider {
 
     static final String PREFS = "bulletbook_cloud";
     static final String SNAPSHOT_KEY = "calendar_widget_v1_json";
+    static final String DISPLAY_MONTH_KEY_PREFIX = "calendar_widget_month_";
+    static final String ACTION_PREVIOUS_MONTH =
+        "kr.co.bulletbook.app.action.WIDGET_PREVIOUS_MONTH";
+    static final String ACTION_NEXT_MONTH =
+        "kr.co.bulletbook.app.action.WIDGET_NEXT_MONTH";
+    static final String ACTION_CURRENT_MONTH =
+        "kr.co.bulletbook.app.action.WIDGET_CURRENT_MONTH";
+
     private static final DateTimeFormatter ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("yyyy-MM");
     private static final DateTimeFormatter MONTH_LABEL =
         DateTimeFormatter.ofPattern("yyyy년 M월", Locale.KOREA);
-
-    // 요일 헤더. 월요일 시작으로 앱의 주간 페이지 순서와 맞춘다.
     private static final String[] WEEKDAYS = {"월", "화", "수", "목", "금", "토", "일"};
 
     @Override
     public void onReceive(Context context, Intent intent) {
         super.onReceive(context, intent);
-        if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction())) {
+        String action = intent.getAction();
+        if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             refreshWidgets(context);
+            return;
         }
+        if (!ACTION_PREVIOUS_MONTH.equals(action)
+            && !ACTION_NEXT_MONTH.equals(action)
+            && !ACTION_CURRENT_MONTH.equals(action)) {
+            return;
+        }
+
+        int widgetId = intent.getIntExtra(
+            AppWidgetManager.EXTRA_APPWIDGET_ID,
+            AppWidgetManager.INVALID_APPWIDGET_ID
+        );
+        if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return;
+
+        YearMonth currentMonth = YearMonth.from(LocalDate.now());
+        YearMonth displayedMonth = loadDisplayedMonth(context, widgetId, currentMonth);
+        if (ACTION_PREVIOUS_MONTH.equals(action)) {
+            displayedMonth = shiftMonth(displayedMonth, -1);
+        } else if (ACTION_NEXT_MONTH.equals(action)) {
+            displayedMonth = shiftMonth(displayedMonth, 1);
+        } else {
+            displayedMonth = currentMonth;
+        }
+        saveDisplayedMonth(context, widgetId, displayedMonth, currentMonth);
+        renderWidget(context, AppWidgetManager.getInstance(context), widgetId);
     }
 
     @Override
@@ -62,6 +89,14 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
             renderWidget(context, manager, id);
         }
         scheduleNextDayAlarm(context);
+    }
+
+    @Override
+    public void onDeleted(Context context, int[] appWidgetIds) {
+        SharedPreferences.Editor editor =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit();
+        for (int id : appWidgetIds) editor.remove(displayMonthKey(id));
+        editor.apply();
     }
 
     @Override
@@ -74,7 +109,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         cancelNextDayAlarm(context);
     }
 
-    /** JS bridge가 snapshot을 저장한 직후 호출한다. */
+    /** JS bridge가 스냅샷을 저장한 직후 호출한다. */
     static void refreshWidgets(Context context) {
         AppWidgetManager manager = AppWidgetManager.getInstance(context);
         ComponentName component = new ComponentName(context, CalendarWidgetProvider.class);
@@ -92,13 +127,20 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
 
         DayCounts counts = loadSnapshot(context);
         LocalDate today = LocalDate.now();
-        YearMonth month = YearMonth.from(today);
+        YearMonth currentMonth = YearMonth.from(today);
+        YearMonth month = loadDisplayedMonth(context, widgetId, currentMonth);
 
         views.setTextViewText(R.id.widget_month_label, month.format(MONTH_LABEL));
+        views.setOnClickPendingIntent(
+            R.id.widget_previous_month_button,
+            monthActionPendingIntent(context, widgetId, ACTION_PREVIOUS_MONTH, "previous")
+        );
+        views.setOnClickPendingIntent(
+            R.id.widget_next_month_button,
+            monthActionPendingIntent(context, widgetId, ACTION_NEXT_MONTH, "next")
+        );
 
-        // RemoteViews로 GridLayout에 0dp 칸을 동적으로 넣으면 일부 One UI
-        // 런처에서 모든 칸이 0픽셀로 접힌다. 가중치가 있는 LinearLayout 행을
-        // 사용해 7열 × 6행 크기를 런처와 관계없이 확정한다.
+        // 가중치가 있는 LinearLayout 행을 써서 One UI 런처에서도 7×6 크기를 보장한다.
         views.removeAllViews(R.id.widget_weekday_row);
         for (String label : WEEKDAYS) {
             RemoteViews cell = new RemoteViews(
@@ -132,10 +174,9 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
             views.addView(R.id.widget_date_grid, row);
         }
 
-        // 월 라벨 클릭 → 해당 월의 월간 페이지
         Intent monthIntent = new Intent(context, MainActivity.class);
         monthIntent.setAction(Intent.ACTION_VIEW);
-        monthIntent.setData(Uri.parse("bulletbook://month/" + month.format(DateTimeFormatter.ofPattern("yyyy-MM"))));
+        monthIntent.setData(Uri.parse("bulletbook://month/" + month.format(MONTH)));
         monthIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent monthPi = PendingIntent.getActivity(
             context, 900000 + month.getYear() * 12 + month.getMonthValue(), monthIntent,
@@ -143,18 +184,77 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         );
         views.setOnClickPendingIntent(R.id.widget_month_label, monthPi);
 
-        // 오늘 버튼 → 오늘 일간 페이지
-        Intent todayIntent = new Intent(context, MainActivity.class);
-        todayIntent.setAction(Intent.ACTION_VIEW);
-        todayIntent.setData(Uri.parse("bulletbook://calendar/" + today.format(ISO)));
-        todayIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent todayPi = PendingIntent.getActivity(
-            context, (int) today.toEpochDay() + 1000000, todayIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-        views.setOnClickPendingIntent(R.id.widget_today_button, todayPi);
+        if (month.equals(currentMonth)) {
+            Intent todayIntent = new Intent(context, MainActivity.class);
+            todayIntent.setAction(Intent.ACTION_VIEW);
+            todayIntent.setData(Uri.parse("bulletbook://calendar/" + today.format(ISO)));
+            todayIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            PendingIntent todayPi = PendingIntent.getActivity(
+                context, (int) today.toEpochDay() + 1000000, todayIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            );
+            views.setOnClickPendingIntent(R.id.widget_today_button, todayPi);
+        } else {
+            views.setOnClickPendingIntent(
+                R.id.widget_today_button,
+                monthActionPendingIntent(context, widgetId, ACTION_CURRENT_MONTH, "today")
+            );
+        }
 
         manager.updateAppWidget(widgetId, views);
+    }
+
+    static YearMonth shiftMonth(YearMonth month, int offset) {
+        return month.plusMonths(offset);
+    }
+
+    static YearMonth parseDisplayedMonth(String value, YearMonth fallback) {
+        if (value == null || value.isEmpty()) return fallback;
+        try {
+            return YearMonth.parse(value, MONTH);
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private static YearMonth loadDisplayedMonth(
+        Context context, int widgetId, YearMonth fallback
+    ) {
+        String value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(displayMonthKey(widgetId), "");
+        return parseDisplayedMonth(value, fallback);
+    }
+
+    private static void saveDisplayedMonth(
+        Context context, int widgetId, YearMonth month, YearMonth currentMonth
+    ) {
+        SharedPreferences.Editor editor =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit();
+        if (month.equals(currentMonth)) {
+            editor.remove(displayMonthKey(widgetId));
+        } else {
+            editor.putString(displayMonthKey(widgetId), month.format(MONTH));
+        }
+        editor.apply();
+    }
+
+    private static String displayMonthKey(int widgetId) {
+        return DISPLAY_MONTH_KEY_PREFIX + widgetId;
+    }
+
+    private static PendingIntent monthActionPendingIntent(
+        Context context, int widgetId, String action, String suffix
+    ) {
+        Intent intent = new Intent(context, CalendarWidgetProvider.class);
+        intent.setAction(action);
+        intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
+        intent.setData(Uri.parse("bulletbook-widget://month/" + widgetId + "/" + suffix));
+        return PendingIntent.getBroadcast(
+            context,
+            widgetId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
     }
 
     static List<LocalDate> visibleDates(YearMonth month) {
@@ -192,7 +292,11 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         cell.setTextViewText(R.id.widget_cell_day, String.valueOf(date.getDayOfMonth()));
         if (isToday) {
             cell.setTextColor(R.id.widget_cell_day, Color.parseColor("#ffffff"));
-            cell.setInt(R.id.widget_cell_day, "setBackgroundResource", R.drawable.widget_today_background);
+            cell.setInt(
+                R.id.widget_cell_day,
+                "setBackgroundResource",
+                R.drawable.widget_today_background
+            );
         } else {
             cell.setTextColor(
                 R.id.widget_cell_day,
@@ -215,7 +319,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         return cell;
     }
 
-    /** 일정 제목을 최대 세 줄로 만들고, 이전 snapshot이면 점으로 대체한다. */
+    /** 일정 제목을 최대 세 줄로 만들고 남은 수를 표시한다. */
     static String eventSummary(DayCount count) {
         if (count == null) return "";
         int open = count.open + count.migrated + count.scheduled;
@@ -234,12 +338,12 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
             return summary.toString();
         }
         StringBuilder dots = new StringBuilder();
-        for (int index = 0; index < Math.min(total, 3); index++) dots.append("●");
+        for (int index = 0; index < Math.min(total, 3); index++) dots.append("•");
         if (total > 3) dots.append(' ').append(total);
         return dots.toString();
     }
 
-    /** SharedPreferences에서 snapshot을 읽어 날짜별 카운트 맵으로 변환한다. */
+    /** SharedPreferences의 스냅샷을 날짜별 일정 수로 변환한다. */
     private static DayCounts loadSnapshot(Context context) {
         DayCounts result = new DayCounts();
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -261,7 +365,9 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
                 JSONArray items = entry.optJSONArray("items");
                 if (items != null) {
                     for (int index = 0; index < Math.min(items.length(), 3); index++) {
-                        String item = items.optString(index, "").replaceAll("\\s+", " ").trim();
+                        String item = items.optString(index, "")
+                            .replaceAll("\\s+", " ")
+                            .trim();
                         if (!item.isEmpty()) {
                             dc.items.add(item.substring(0, Math.min(item.length(), 80)));
                         }
@@ -270,12 +376,10 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
                 result.days.put(key, dc);
             }
         } catch (Exception ignored) {
-            // 손상된 snapshot은 빈 위젯으로 표시한다.
+            // 손상된 스냅샷은 빈 위젯으로 표시한다.
         }
         return result;
     }
-
-    // ---- 자정 이후 갱신 (inexact alarm, 권한 불필요) ----
 
     private static final int ALARM_REQUEST_CODE = 0xB00C;
 
@@ -284,7 +388,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         if (am == null) return;
         LocalDate next = LocalDate.now().plusDays(1);
         long triggerAt = next.atStartOfDay(java.time.ZoneId.systemDefault())
-            .toInstant().toEpochMilli() + 5 * 60 * 1000L; // 다음날 00:05 ± window
+            .toInstant().toEpochMilli() + 5 * 60 * 1000L;
         Intent intent = new Intent(context, CalendarWidgetProvider.class);
         intent.setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE);
         PendingIntent pi = PendingIntent.getBroadcast(
@@ -305,8 +409,6 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         );
         am.cancel(pi);
     }
-
-    // ---- snapshot 데이터 모델 ----
 
     static final class DayCounts {
         final Map<String, DayCount> days = new HashMap<>();
