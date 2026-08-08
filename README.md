@@ -1,4 +1,4 @@
-# BulletBook 0.38.0
+# BulletBook 0.39.1
 
 종이에 작성하던 불렛저널을 모눈 페이지 기반의 편집 가능한 전자책으로 옮긴 Windows·Android 공통 버전입니다.
 
@@ -67,7 +67,7 @@ Windows 실행에는 Node.js LTS가 필요합니다. Android와 동기화하지 
 2. 프로젝트 루트의 `Build_Android_Debug.bat`를 더블클릭합니다.
 3. 완료되면 생성된 `app-debug.apk`가 선택된 탐색기 창이 열립니다.
 
-배치파일이 SDK를 찾지 못하면 Android Studio에서 `android` 폴더를 열고 Gradle 동기화 후 `Build > Build APK(s)`를 실행해도 됩니다. 최초 APK 빌드에 필요한 Capacitor Android 모듈은 프로젝트에 포함되어 있으므로 Node.js가 필요하지 않습니다.
+배치파일이 SDK를 찾지 못하면 Android Studio에서 `android` 폴더를 열고 Gradle 동기화 후 `Build > Build APK(s)`를 실행해도 됩니다. 깨끗한 GitHub 소스에서 처음 빌드할 때는 Node.js LTS가 필요합니다. `Build_Android_Debug.bat`이 `npm ci`와 Android 동기화를 자동으로 실행한 뒤 APK를 만듭니다.
 
 웹 소스 자체를 수정한 뒤 Android에 다시 반영할 때만 Node.js를 설치하고 프로젝트 루트에서 다음을 실행합니다.
 

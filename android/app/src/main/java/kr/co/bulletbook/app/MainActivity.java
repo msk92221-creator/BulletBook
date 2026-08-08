@@ -3,9 +3,12 @@ package kr.co.bulletbook.app;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import android.view.View;
 import android.webkit.JavascriptInterface;
@@ -31,12 +34,19 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import java.security.MessageDigest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
 
 public class MainActivity extends BridgeActivity {
     private static final String CLIENT_ID = "2c714971-eb05-4abb-8a15-d08319774c6c";
@@ -55,6 +65,7 @@ public class MainActivity extends BridgeActivity {
         GITHUB_API_ROOT + "/repos/" + GITHUB_REPO + "/releases/latest";
     private static final Pattern VERSION_PATTERN =
         Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)");
+    private static final int MAX_UPDATE_BYTES = 200 * 1024 * 1024;
 
     private static final String PREFS = "bulletbook_cloud";
     private static final String ACCESS_TOKEN = "access_token";
@@ -66,6 +77,8 @@ public class MainActivity extends BridgeActivity {
     private static final String PENDING_LOGIN_EXPIRES_AT = "pending_login_expires_at";
     private static final String PENDING_NEXT_POLL_AT = "pending_next_poll_at";
     private static final String PENDING_POLL_INTERVAL = "pending_poll_interval";
+    private static final String TOKEN_KEY_ALIAS = "bulletbook_cloud_token_key_v1";
+    private static final String ENCRYPTED_TOKEN_PREFIX = "enc-v1:";
     private static final long BACK_EXIT_WINDOW_MS = 2000L;
 
     private final ExecutorService cloudExecutor = Executors.newSingleThreadExecutor();
@@ -153,18 +166,25 @@ public class MainActivity extends BridgeActivity {
     private void captureWidgetIntent(Intent intent) {
         if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
         Uri data = intent.getData();
-        if (data == null) return;
+        if (data == null || !"bulletbook".equals(data.getScheme())) return;
         String host = data.getHost();
         String path = data.getLastPathSegment();
         if (host == null || path == null) return;
         if ("calendar".equals(host)) {
-            pendingWidgetDate = path;
+            String date = UpdateSecurity.canonicalWidgetDate(path);
+            if (date == null) return;
+            pendingWidgetDate = date;
+            pendingWidgetMonth = null;
             widgetNavigationDispatched = false;
         } else if ("month".equals(host)) {
-            pendingWidgetMonth = path;
+            String month = UpdateSecurity.canonicalWidgetMonth(path);
+            if (month == null) return;
+            pendingWidgetMonth = month;
+            pendingWidgetDate = null;
             widgetNavigationDispatched = false;
         }
     }
+
 
     /**
      * 보관된 위젯 딥링크를 WebView의 JS 콜백으로 넘긴다.
@@ -180,11 +200,17 @@ public class MainActivity extends BridgeActivity {
         try {
             if (date != null) {
                 webView.evaluateJavascript(
-                    "(window.__bulletBookOpenWidgetDate||function(){})('" + date + "');", null);
+                    "(window.__bulletBookOpenWidgetDate||function(){})(" +
+                        JSONObject.quote(date) + ");",
+                    null
+                );
                 pendingWidgetDate = null;
             } else if (month != null) {
                 webView.evaluateJavascript(
-                    "(window.__bulletBookOpenWidgetMonth||function(){})('" + month + "');", null);
+                    "(window.__bulletBookOpenWidgetMonth||function(){})(" +
+                        JSONObject.quote(month) + ");",
+                    null
+                );
                 pendingWidgetMonth = null;
             }
         } catch (Exception ignored) {
@@ -445,8 +471,69 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    private SecretKey tokenSecretKey() throws Exception {
+        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+        keyStore.load(null);
+        SecretKey existing = (SecretKey) keyStore.getKey(TOKEN_KEY_ALIAS, null);
+        if (existing != null) return existing;
+
+        KeyGenerator generator = KeyGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_AES,
+            "AndroidKeyStore"
+        );
+        generator.init(
+            new KeyGenParameterSpec.Builder(
+                TOKEN_KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .build()
+        );
+        return generator.generateKey();
+    }
+
+    private String encryptToken(String plainText) throws Exception {
+        if (plainText == null || plainText.isEmpty()) return "";
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, tokenSecretKey());
+        byte[] encrypted = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
+        return ENCRYPTED_TOKEN_PREFIX +
+            Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP) + ":" +
+            Base64.encodeToString(encrypted, Base64.NO_WRAP);
+    }
+
+    private String decryptToken(String stored) throws Exception {
+        if (stored == null || stored.isEmpty()) return "";
+        if (!stored.startsWith(ENCRYPTED_TOKEN_PREFIX)) return stored;
+        String[] parts = stored.substring(ENCRYPTED_TOKEN_PREFIX.length()).split(":", 2);
+        if (parts.length != 2) throw new IllegalArgumentException("Invalid encrypted token");
+        byte[] iv = Base64.decode(parts[0], Base64.NO_WRAP);
+        byte[] encrypted = Base64.decode(parts[1], Base64.NO_WRAP);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE, tokenSecretKey(), new GCMParameterSpec(128, iv));
+        return new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
+    }
+
+    private String readStoredToken(String key) throws Exception {
+        String stored = preferences().getString(key, "");
+        if (stored == null || stored.isEmpty()) return "";
+        try {
+            String plainText = decryptToken(stored);
+            if (!stored.startsWith(ENCRYPTED_TOKEN_PREFIX)) {
+                preferences().edit().putString(key, encryptToken(plainText)).apply();
+            }
+            return plainText;
+        } catch (Exception error) {
+            clearToken();
+            throw new CloudException(
+                "AUTH_REQUIRED",
+                "보호된 Microsoft 로그인 정보를 읽지 못했습니다. 다시 로그인해 주세요."
+            );
+        }
+    }
     private void saveToken(JSONObject payload) throws Exception {
-        String existingRefreshToken = preferences().getString(REFRESH_TOKEN, "");
+        String existingRefreshToken = readStoredToken(REFRESH_TOKEN);
         String refreshToken = payload.optString("refresh_token", existingRefreshToken);
         if (refreshToken.isEmpty()) {
             throw new CloudException(
@@ -461,8 +548,8 @@ public class MainActivity extends BridgeActivity {
         long expiresAt = System.currentTimeMillis() +
             Math.max(60, payload.optLong("expires_in", 3600)) * 1000L;
         preferences().edit()
-            .putString(ACCESS_TOKEN, payload.optString("access_token", ""))
-            .putString(REFRESH_TOKEN, refreshToken)
+            .putString(ACCESS_TOKEN, encryptToken(payload.optString("access_token", "")))
+            .putString(REFRESH_TOKEN, encryptToken(refreshToken))
             .putLong(TOKEN_EXPIRES_AT, expiresAt)
             .putString(ACCOUNT_LABEL, accountLabel)
             .apply();
@@ -478,11 +565,11 @@ public class MainActivity extends BridgeActivity {
     }
 
     private String accessToken(boolean forceRefresh) throws Exception {
-        String refreshToken = preferences().getString(REFRESH_TOKEN, "");
+        String refreshToken = readStoredToken(REFRESH_TOKEN);
         if (refreshToken.isEmpty()) {
             throw new CloudException("AUTH_REQUIRED", "Microsoft 계정 로그인이 필요합니다.");
         }
-        String accessToken = preferences().getString(ACCESS_TOKEN, "");
+        String accessToken = readStoredToken(ACCESS_TOKEN);
         long expiresAt = preferences().getLong(TOKEN_EXPIRES_AT, 0);
         if (!forceRefresh && !accessToken.isEmpty() &&
             expiresAt > System.currentTimeMillis() + 60000) {
@@ -510,7 +597,7 @@ public class MainActivity extends BridgeActivity {
             );
         }
         saveToken(payload);
-        return preferences().getString(ACCESS_TOKEN, "");
+        return readStoredToken(ACCESS_TOKEN);
     }
 
     private HttpResult graphRequest(
@@ -735,7 +822,7 @@ public class MainActivity extends BridgeActivity {
 
     private JSONObject pollPendingLoginOnce() throws Exception {
         if (pendingDeviceCode == null) {
-            if (!preferences().getString(REFRESH_TOKEN, "").isEmpty()) {
+            if (!readStoredToken(REFRESH_TOKEN).isEmpty()) {
                 return authorizedLoginResult();
             }
             throw new CloudException(
@@ -819,7 +906,29 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+
+    private String sha256Hex(byte[] bytes) throws Exception {
+        byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+        StringBuilder hex = new StringBuilder(digest.length * 2);
+        for (byte value : digest) hex.append(String.format("%02x", value & 0xff));
+        return hex.toString();
+    }
+
+    private void verifyUpdateDigest(byte[] bytes, String expectedDigest) throws Exception {
+        String expected = expectedDigest == null ? "" : expectedDigest.trim();
+        if (!expected.toLowerCase(java.util.Locale.ROOT).startsWith("sha256:")) {
+            throw new CloudException("UPDATE_INTEGRITY", "업데이트 검증값이 없습니다.");
+        }
+        String actual = "sha256:" + sha256Hex(bytes);
+        if (!actual.equalsIgnoreCase(expected)) {
+            throw new CloudException("UPDATE_INTEGRITY", "업데이트 파일 검증에 실패했습니다.");
+        }
+    }
+
     private byte[] downloadBytes(String address) throws Exception {
+        if (!UpdateSecurity.isTrustedReleaseAsset(address)) {
+            throw new CloudException("UNTRUSTED_UPDATE", "허용되지 않은 업데이트 주소입니다.");
+        }
         HttpURLConnection connection = (HttpURLConnection) new URL(address).openConnection();
         connection.setRequestMethod("GET");
         connection.setRequestProperty("User-Agent", "BulletBook-Updater");
@@ -827,6 +936,11 @@ public class MainActivity extends BridgeActivity {
         connection.setReadTimeout(180000);
         connection.setInstanceFollowRedirects(true);
         int status = connection.getResponseCode();
+        long contentLength = connection.getContentLengthLong();
+        if (contentLength > MAX_UPDATE_BYTES) {
+            connection.disconnect();
+            throw new CloudException("UPDATE_TOO_LARGE", "업데이트 파일이 너무 큽니다.");
+        }
         InputStream stream = status >= 400
             ? connection.getErrorStream()
             : connection.getInputStream();
@@ -834,7 +948,16 @@ public class MainActivity extends BridgeActivity {
         if (stream != null) {
             byte[] buffer = new byte[16384];
             int count;
-            while ((count = stream.read(buffer)) != -1) output.write(buffer, 0, count);
+            int total = 0;
+            while ((count = stream.read(buffer)) != -1) {
+                total += count;
+                if (total > MAX_UPDATE_BYTES) {
+                    stream.close();
+                    connection.disconnect();
+                    throw new CloudException("UPDATE_TOO_LARGE", "업데이트 파일이 너무 큽니다.");
+                }
+                output.write(buffer, 0, count);
+            }
             stream.close();
         }
         connection.disconnect();
@@ -903,6 +1026,7 @@ public class MainActivity extends BridgeActivity {
         if (latestVersion.isEmpty()) latestVersion = best.optString("name", "");
         summary.put("latestVersion", latestVersion);
         summary.put("itemId", best.optString("browser_download_url", ""));
+        summary.put("digest", best.optString("digest", ""));
         summary.put("name", best.optString("name", ""));
         summary.put("size", best.optLong("size", 0));
         summary.put("available", bestScore > versionScore(current));
@@ -930,7 +1054,7 @@ public class MainActivity extends BridgeActivity {
                     JSONObject value = new JSONObject();
                     value.put(
                         "connected",
-                        !preferences().getString(REFRESH_TOKEN, "").isEmpty()
+                        !readStoredToken(REFRESH_TOKEN).isEmpty()
                     );
                     value.put("accountLabel", preferences().getString(ACCOUNT_LABEL, ""));
                     sendJson(requestId, value);
@@ -1095,8 +1219,17 @@ public class MainActivity extends BridgeActivity {
                         sendError(requestId, "NO_ITEM", "설치할 업데이트 파일이 없습니다.");
                         return;
                     }
+                    JSONObject trustedUpdate = findLatestUpdate();
+                    String trustedItemId = trustedUpdate.optString("itemId", "");
+                    if (!itemId.equals(trustedItemId) || !UpdateSecurity.isTrustedReleaseAsset(trustedItemId)) {
+                        throw new CloudException(
+                            "UNTRUSTED_UPDATE",
+                            "GitHub 최신 릴리스와 일치하지 않는 업데이트입니다."
+                        );
+                    }
                     // Android 8부터는 '이 출처의 앱 설치 허용'을 켜야 설치할 수 있다.
-                    if (!getPackageManager().canRequestPackageInstalls()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                        !getPackageManager().canRequestPackageInstalls()) {
                         runOnUiThread(() -> {
                             try {
                                 Intent settings = new Intent(
@@ -1117,9 +1250,8 @@ public class MainActivity extends BridgeActivity {
                         return;
                     }
 
-                    // itemId 자리에는 GitHub asset의 직접 다운로드 URL이 들어온다.
-                    // 익명으로 받을 수 있어 별도 인증이나 사전 서명 URL이 필요 없다.
-                    byte[] bytes = downloadBytes(itemId);
+                    byte[] bytes = downloadBytes(trustedItemId);
+                    verifyUpdateDigest(bytes, trustedUpdate.optString("digest", ""));
 
                     File target = new File(getCacheDir(), "BulletBook_update.apk");
                     try (FileOutputStream output = new FileOutputStream(target)) {

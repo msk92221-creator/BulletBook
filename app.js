@@ -1387,7 +1387,7 @@
       else if (status === "scheduled") bucket.scheduled += 1;
       else bucket.open += 1;
     }
-    return { version: 1, updatedAt: new Date().toISOString(), days };
+    return { version: 1, days };
   }
 
   function syncCalendarWidget() {
@@ -1395,9 +1395,10 @@
     const native = window.BulletBookNative;
     if (!native?.pushCalendarWidget) return;
     const snapshot = buildCalendarWidgetSnapshot();
-    const json = JSON.stringify(snapshot);
-    if (json === lastWidgetSnapshotJson) return; // 변경이 없으면 다시 보내지 않는다.
-    lastWidgetSnapshotJson = json;
+    const stableJson = JSON.stringify(snapshot);
+    if (stableJson === lastWidgetSnapshotJson) return; // 내용이 같으면 위젯을 다시 그리지 않는다.
+    lastWidgetSnapshotJson = stableJson;
+    const json = JSON.stringify({ ...snapshot, updatedAt: new Date().toISOString() });
     const requestId = `widget-${Date.now()}-${++widgetNativeSequence}`;
     try {
       native.pushCalendarWidget(requestId, json);
@@ -6798,7 +6799,7 @@
       const applied = await (await fetch("/api/update/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId: info.itemId }),
+        body: "{}",
       })).json();
       if (applied.message) throw new Error(applied.message);
       setDesktopUpdateStatus(

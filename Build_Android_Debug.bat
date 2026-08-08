@@ -47,6 +47,21 @@ if errorlevel 1 (
   exit /b 1
 )
 
+if not exist "%BB_ANDROID%\capacitor-cordova-android-plugins\cordova.variables.gradle" (
+  where npm >nul 2>nul
+  if errorlevel 1 (
+    echo [ERROR] The first Android build requires Node.js LTS.
+    echo Install Node.js LTS from https://nodejs.org/ and run this file again.
+    pause
+    exit /b 1
+  )
+  echo [INFO] Preparing the Android project for the first build...
+  call npm ci
+  if errorlevel 1 goto :failed
+  call npm run android:sync
+  if errorlevel 1 goto :failed
+)
+
 set "GRADLE_USER_HOME=%~dp0.android-gradle-cache"
 cd /d "%BB_ANDROID%"
 call gradlew.bat assembleDebug
@@ -55,13 +70,13 @@ if errorlevel 1 goto :failed
 echo.
 echo [SUCCESS] APK created:
 echo %BB_APK%
-explorer /select,"%BB_APK%"
-pause
+if not defined BULLETBOOK_CI explorer /select,"%BB_APK%"
+if not defined BULLETBOOK_CI pause
 exit /b 0
 
 :failed
 echo.
 echo [ERROR] Android build failed.
 echo Open the android folder in Android Studio and check the Build output.
-pause
+if not defined BULLETBOOK_CI pause
 exit /b 1
