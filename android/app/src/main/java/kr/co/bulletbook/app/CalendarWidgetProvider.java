@@ -29,8 +29,8 @@ import java.util.Map;
  * 홈 화면 한 달 달력 위젯.
  *
  * 데이터는 MainActivity의 CloudAccountBridge가 SharedPreferences에 저장한
- * calendar_widget_v1_json 스냅샷에서 읽는다. 날짜를 누르면 해당 일간 계획과
- * 일정 편집기를 열고, 월 제목을 누르면 월간 계획을 연다.
+ * calendar_widget_v1_json 스냅샷에서 읽는다. 날짜를 누르면 현재 페이지 쓰기를
+ * 열어 일반 기록·일정·루틴을 추가하고, 월 제목은 기존 월간 계획을 연다.
  */
 public class CalendarWidgetProvider extends AppWidgetProvider {
 

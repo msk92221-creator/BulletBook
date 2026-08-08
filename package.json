@@ -1,6 +1,6 @@
 {
   "name": "bulletbook",
-  "version": "0.39.3",
+  "version": "0.39.4",
   "private": true,
   "description": "편집 가능한 불렛저널 - Windows와 Android 공통 앱",
   "scripts": {

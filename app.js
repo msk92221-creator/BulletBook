@@ -455,6 +455,7 @@
   let mobileWriteMode = "once";
   let mobileWriteTarget = "";
   let mobileWriteDetail = "";
+  let mobileWriteDateContext = "";
   let advancedMobileEditing = false;
   let pageListDragState = null;
   let cloudAuthWindow = null;
@@ -607,6 +608,9 @@
           weekdays: [...new Set((Array.isArray(mission.weekdays) ? mission.weekdays : [])
             .map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6))],
           scheduledDate: normalizedDateOrBlank(mission.scheduledDate),
+          // 위젯·현재 페이지 쓰기에서 만든 빠른 루틴의 시작일. 비어 있으면
+          // 기존 미션처럼 과거 날짜 제한 없이 반복 규칙만 적용한다.
+          startDate: normalizedDateOrBlank(mission.startDate),
           // 매월 특정 날짜(monthly-date). 그 달에 없는 날짜(31일 등)는 건너뛴다 —
           // '매월 마지막 날'은 별도 종류라 여기서 달 길이에 맞춰 당기지 않는다.
           monthDay: clamp(Math.round(Number(mission.monthDay) || 1), 1, 31),
@@ -2048,6 +2052,8 @@
     if (!mission?.active || !goal || goal.status !== "active") return false;
     const day = date.getDay();
     const dateValue = isoDate(date);
+    const startDate = normalizedDateOrBlank(mission.startDate);
+    if (startDate && dateValue < startDate) return false;
     if (mission.schedule === "once") return mission.scheduledDate === dateValue;
     if (mission.schedule === "weekdays") return day >= 1 && day <= 5;
     if (mission.schedule === "weekend") return day === 0 || day === 6;
@@ -5761,6 +5767,7 @@
 
   function calendarDateForMobileWriteTarget(page, target) {
     if (!page || !target) return "";
+    if (mobileWriteDateContext) return mobileWriteDateContext;
     if (target.detail === "year-day") {
       const year = Number(page.year);
       const month = Number(target.month);
@@ -5805,7 +5812,9 @@
     refs.mobilePageWriteTitle.textContent = meta.title;
     refs.mobilePageWriteContextIcon.textContent = meta.icon;
     refs.mobilePageWriteContextTitle.textContent = displayTitle;
-    refs.mobilePageWriteContextDescription.textContent = meta.description;
+    refs.mobilePageWriteContextDescription.textContent = mobileWriteDateContext
+      ? `${meta.description} · 위젯 선택 ${dailyDateLabel(dateFromIso(mobileWriteDateContext))}`
+      : meta.description;
     refs.mobilePageWriteTargetLegend.textContent = meta.legend;
     refs.mobilePageWriteWeekField.hidden = !isWeekly;
     refs.mobilePageWriteWeekNumber.readOnly = true;
@@ -5841,8 +5850,11 @@
       selected?.placeholder || "현재 페이지에 기록할 내용을 입력하세요";
     refs.mobilePageWriteSubmit.textContent =
       selected?.submitLabel || "현재 페이지에 추가";
+    const widgetDateHint = mobileWriteDateContext
+      ? `위젯에서 선택한 ${dailyDateLabel(dateFromIso(mobileWriteDateContext))}입니다. ○ 일정은 이 날짜에 저장됩니다. `
+      : "";
     refs.mobilePageWriteHint.textContent =
-      `${selected?.hint || "다음 빈 줄"}에 자동 배치됩니다. 추가한 기록과 템플릿의 제목·날짜·항목명은 두 번 터치하면 편집됩니다. 기록은 한 번 터치해 크기 조절, 드래그해 모눈 단위 이동, 길게 눌러 수정·삭제할 수 있습니다.`;
+      `${widgetDateHint}${selected?.hint || "다음 빈 줄"}에 자동 배치됩니다. 추가한 기록과 템플릿의 제목·날짜·항목명은 두 번 터치하면 편집됩니다. 기록은 한 번 터치해 크기 조절, 드래그해 모눈 단위 이동, 길게 눌러 수정·삭제할 수 있습니다.`;
     updateMobileWriteSymbolButtons();
   }
 
@@ -5858,14 +5870,18 @@
       refs.mobilePageWriteInput.placeholder = "예: 만 보 걷기";
       refs.mobilePageWriteSubmit.textContent = "루틴 만들기";
       refs.mobilePageWriteHint.textContent =
-        "저장하면 오늘부터 한 달 안에 이미 있는 일간·주간 계획에 자동으로 채워지고, 월간 요약에도 표시됩니다.";
+        "저장하면 오늘부터 한 달 안에 이미 있는 일간·주간 계획에 자동으로 채워지고, 월간 요약에도 표시됩니다." +
+        (mobileWriteDateContext
+          ? ` 위젯에서 고른 ${dailyDateLabel(dateFromIso(mobileWriteDateContext))}이 날짜 입력의 기본값입니다.`
+          : "");
       updateMobileRoutineScheduleFields();
     } else {
       renderMobilePageWriteTargets();
     }
   }
 
-  function openMobilePageWrite() {
+  function openMobilePageWrite(options = {}) {
+    mobileWriteDateContext = normalizedDateOrBlank(options?.date);
     const indexes = visibleIndexes();
     refs.mobilePageWritePageSelect.innerHTML = indexes.map(index => {
       const page = book.pages[index];
@@ -5880,6 +5896,14 @@
     mobileWriteDetail = "";
     refs.mobilePageWriteInput.value = "";
     refs.mobileRoutineSchedule.value = "daily";
+    const routineDate = mobileWriteDateContext || isoDate(new Date());
+    refs.mobileRoutineDate.value = routineDate;
+    refs.mobileRoutineIntervalStart.value = routineDate;
+    refs.mobileRoutineYearlyDate.value = routineDate;
+    refs.mobileRoutineMonthDay.value = String(dateFromIso(routineDate).getDate());
+    $$('input[type="checkbox"]', refs.mobileRoutineWeekdayField).forEach(input => {
+      input.checked = Number(input.value) === dateFromIso(routineDate).getDay();
+    });
     setMobileWriteMode("once");
     if (!refs.mobilePageWriteDialog.open) refs.mobilePageWriteDialog.showModal();
     requestAnimationFrame(() => refs.mobilePageWriteInput.focus());
@@ -6096,6 +6120,7 @@
       weeklyTarget: clamp(Math.round(Number(refs.mobileRoutineWeeklyTarget.value) || 1), 1, 7),
       weekdays,
       scheduledDate: schedule === "once" ? normalizedDateOrBlank(refs.mobileRoutineDate.value) : "",
+      startDate: mobileWriteDateContext || isoDate(new Date()),
       monthDay: clamp(Math.round(Number(refs.mobileRoutineMonthDay.value) || 1), 1, 31),
       yearMonth: yearlyParts[1],
       yearDay: yearlyParts[2],
@@ -6615,6 +6640,7 @@
         weeklyTarget: clamp(Math.round(Number(refs.missionEditorWeeklyTarget.value) || 1), 1, 7),
         weekdays,
         scheduledDate: schedule === "once" ? normalizedDateOrBlank(refs.missionEditorDate.value) : "",
+        startDate: normalizedDateOrBlank(mission?.startDate),
         monthDay: clamp(Math.round(Number(refs.missionEditorMonthDay.value) || 1), 1, 31),
         yearMonth: yearlyParts[1],
         yearDay: yearlyParts[2],
@@ -8794,19 +8820,19 @@
     window.__bulletBookOpenWidgetDate = value => {
       const date = dateFromIso(value);
       if (!date) return;
-      const result = ensureDailyPage(date);
-      if (result.created) commitHistory();
-      if (result.page) {
-        navigateToBookPage(result.page);
-        requestAnimationFrame(() => openCalendarEventEditor(value));
-      }
+      openMobilePageWrite({ date: isoDate(date) });
     };
     window.__bulletBookOpenWidgetMonth = value => {
       const match = /^(\d{4})-(\d{1,2})$/.exec(String(value || ""));
       if (!match) return;
-      const result = ensureMonthlyPage(Number(match[1]), Number(match[2]));
-      if (result?.created) commitHistory();
-      if (result?.page) navigateToBookPage(result.page);
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      const page = book.pages.find(candidate => candidate.type === "monthly" && (() => {
+        const context = monthlyDateContext(candidate);
+        return context.hasCalendarDate && context.year === year && context.month === month;
+      })());
+      if (page) navigateToBookPage(page);
+      else openMobilePageWrite();
     };
     window.addEventListener("afterprint", () => { refs.printBook.innerHTML = ""; });
   }
