@@ -1378,25 +1378,50 @@
   let lastWidgetSnapshotJson = "";
   let widgetNativeSequence = 0;
 
+  function addCalendarWidgetItem(days, date, status, item) {
+    if (!date) return;
+    const bucket = days[date] || (days[date] = {
+      open: 0, completed: 0, migrated: 0, scheduled: 0, items: [],
+    });
+    if (status === "completed") bucket.completed += 1;
+    else if (status === "migrated") bucket.migrated += 1;
+    else if (status === "scheduled") bucket.scheduled += 1;
+    else bucket.open += 1;
+    const cleanItem = String(item || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (cleanItem && bucket.items.length < 3 && !bucket.items.includes(cleanItem)) {
+      bucket.items.push(cleanItem);
+    }
+  }
+
   function buildCalendarWidgetSnapshot() {
     const days = {};
+    const representedMissionDates = new Set();
     for (const event of book.calendarEvents || []) {
       const date = String(event?.date || "");
       if (!date) continue;
-      const bucket = days[date] || (days[date] = {
-        open: 0, completed: 0, migrated: 0, scheduled: 0, items: [],
-      });
-      const status = event.status || "open";
-      if (status === "completed") bucket.completed += 1;
-      else if (status === "migrated") bucket.migrated += 1;
-      else if (status === "scheduled") bucket.scheduled += 1;
-      else bucket.open += 1;
-      const item = calendarEventText(event).replace(/\s+/g, " ").trim().slice(0, 80);
-      if (item && bucket.items.length < 3 && !bucket.items.includes(item)) {
-        bucket.items.push(item);
+      const missionKey = event?.missionId ? `${date}|${event.missionId}` : "";
+      if (missionKey && representedMissionDates.has(missionKey)) continue;
+      if (missionKey) representedMissionDates.add(missionKey);
+      addCalendarWidgetItem(days, date, event.status || "open", calendarEventText(event));
+    }
+
+    // Project active routines directly into the widget. Previously only materialized
+    // calendarEvents were exported, so routines could disappear until a daily/weekly
+    // page happened to create an event for them. Keep a bounded multi-year window so
+    // month navigation remains useful without making the native snapshot unbounded.
+    const today = new Date();
+    const projectionStart = new Date(today.getFullYear() - 1, 0, 1);
+    const projectionEnd = new Date(today.getFullYear() + 2, 11, 31);
+    for (let date = projectionStart; date <= projectionEnd; date = offsetDate(date, 1)) {
+      const dateValue = isoDate(date);
+      for (const mission of missionsDueOn(date)) {
+        const missionKey = `${dateValue}|${mission.id}`;
+        if (representedMissionDates.has(missionKey)) continue;
+        representedMissionDates.add(missionKey);
+        addCalendarWidgetItem(days, dateValue, "open", missionBulletText(mission));
       }
     }
-    return { version: 2, days };
+    return { version: 3, days };
   }
 
   function syncCalendarWidget() {
@@ -1561,9 +1586,15 @@
     // 반복 미션도 함께 보여준다 — 월간 페이지에는 따로 쓸 칸이 없으므로
     // 미션은 여기서 요약으로만 보이고, 실제 상태 변경은 일간·주간의
     // 불렛에서 한다.
-    const events = calendarEventsForDate(dateValue).map(event => calendarEventText(event));
+    const calendarEvents = calendarEventsForDate(dateValue);
+    const events = calendarEvents.map(event => calendarEventText(event));
+    const representedMissionIds = new Set(
+      calendarEvents.map(event => String(event?.missionId || "")).filter(Boolean)
+    );
     const date = normalizedDateOrBlank(dateValue);
-    const missions = date ? missionsDueOn(dateFromIso(date)).map(mission => missionBulletText(mission)) : [];
+    const missions = date ? missionsDueOn(dateFromIso(date))
+      .filter(mission => !representedMissionIds.has(String(mission.id)))
+      .map(mission => missionBulletText(mission)) : [];
     const items = [...events, ...missions];
     if (!items.length) return "";
     const text = items.join(" · ");
@@ -3267,18 +3298,18 @@
   }
 
   function shortType(type, planTemplate = "") {
-    if (type === "blank" && planTemplate === "project") return "PROJECT";
-    if (type === "blank" && planTemplate === "tracker") return "TRACK";
-    if (type === "blank" && planTemplate === "life-map") return "LIFE";
-    if (type === "blank" && planTemplate === "goal-detail") return "MISSION";
-    if (type === "blank" && (isYearCalendarTemplate(planTemplate))) return "YEAR";
+    if (type === "blank" && planTemplate === "project") return "프로젝트";
+    if (type === "blank" && planTemplate === "tracker") return "습관";
+    if (type === "blank" && planTemplate === "life-map") return "영역";
+    if (type === "blank" && planTemplate === "goal-detail") return "실행";
+    if (type === "blank" && isYearCalendarTemplate(planTemplate)) return "연간";
     const map = {
-      cover: "표지", index: "목차", symbols: "KEY", goals: "GOAL",
-      "future-h1": "6M", "future-h2": "6M", monthly: "MONTH",
-      "weekly-left": "WEEK", "weekly-right": "WEEK",
-      daily: "DAY", manual1: "GUIDE", manual2: "GUIDE", feedback: "REVIEW", blank: "NOTE",
+      cover: "표지", index: "목차", symbols: "기호", goals: "목표",
+      "future-h1": "미래", "future-h2": "미래", monthly: "월간",
+      "weekly-left": "주간", "weekly-right": "주간",
+      daily: "일간", manual1: "안내", manual2: "안내", feedback: "회고", blank: "메모",
     };
-    return map[type] || "PAGE";
+    return map[type] || "페이지";
   }
 
   function renderSpread() {
@@ -8819,12 +8850,13 @@
     // 위젯 날짜/월 클릭 deep-link. cold start 시 WebView 준비 후 native가 호출한다.
     window.__bulletBookOpenWidgetDate = value => {
       const date = dateFromIso(value);
-      if (!date) return;
+      if (!date) return false;
       openMobilePageWrite({ date: isoDate(date) });
+      return true;
     };
     window.__bulletBookOpenWidgetMonth = value => {
       const match = /^(\d{4})-(\d{1,2})$/.exec(String(value || ""));
-      if (!match) return;
+      if (!match) return false;
       const year = Number(match[1]);
       const month = Number(match[2]);
       const page = book.pages.find(candidate => candidate.type === "monthly" && (() => {
@@ -8833,6 +8865,7 @@
       })());
       if (page) navigateToBookPage(page);
       else openMobilePageWrite();
+      return true;
     };
     window.addEventListener("afterprint", () => { refs.printBook.innerHTML = ""; });
   }

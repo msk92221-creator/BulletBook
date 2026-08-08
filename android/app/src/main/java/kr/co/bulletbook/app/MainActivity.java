@@ -93,6 +93,7 @@ public class MainActivity extends BridgeActivity {
     private String pendingWidgetDate;
     private String pendingWidgetMonth;
     private boolean widgetNavigationDispatched;
+    private boolean widgetNavigationReady;
     private final Runnable automaticLoginPoll = () -> cloudExecutor.execute(() -> {
         try {
             JSONObject result = pollPendingLoginOnce();
@@ -191,28 +192,40 @@ public class MainActivity extends BridgeActivity {
      * 실제 트리거는 CloudAccountBridge.readyForWidgetNavigation()에서 이 메서드를 부른다.
      */
     private void dispatchWidgetNavigation() {
-        if (widgetNavigationDispatched) return;
+        if (!widgetNavigationReady || widgetNavigationDispatched) return;
         String date = pendingWidgetDate;
         String month = pendingWidgetMonth;
         if (date == null && month == null) return;
         if (webView == null) return;
         widgetNavigationDispatched = true;
         try {
+            final String dispatchedDate = date;
+            final String dispatchedMonth = month;
+            final String script;
             if (date != null) {
-                webView.evaluateJavascript(
-                    "(window.__bulletBookOpenWidgetDate||function(){})(" +
-                        JSONObject.quote(date) + ");",
-                    null
-                );
-                pendingWidgetDate = null;
-            } else if (month != null) {
-                webView.evaluateJavascript(
-                    "(window.__bulletBookOpenWidgetMonth||function(){})(" +
-                        JSONObject.quote(month) + ");",
-                    null
-                );
-                pendingWidgetMonth = null;
+                script = "(function(){try{var fn=window.__bulletBookOpenWidgetDate;" +
+                    "return typeof fn==='function'&&fn(" + JSONObject.quote(date) + ")===true;" +
+                    "}catch(e){return false;}})();";
+            } else {
+                script = "(function(){try{var fn=window.__bulletBookOpenWidgetMonth;" +
+                    "return typeof fn==='function'&&fn(" + JSONObject.quote(month) + ")===true;" +
+                    "}catch(e){return false;}})();";
             }
+            webView.evaluateJavascript(script, result -> {
+                boolean handled = "true".equalsIgnoreCase(String.valueOf(result).replace("\"", ""));
+                if (handled) {
+                    if (dispatchedDate != null && dispatchedDate.equals(pendingWidgetDate)) {
+                        pendingWidgetDate = null;
+                    }
+                    if (dispatchedMonth != null && dispatchedMonth.equals(pendingWidgetMonth)) {
+                        pendingWidgetMonth = null;
+                    }
+                } else {
+                    widgetNavigationReady = false;
+                }
+                widgetNavigationDispatched = false;
+                dispatchWidgetNavigation();
+            });
         } catch (Exception ignored) {
             widgetNavigationDispatched = false;
         }
@@ -1315,6 +1328,7 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public void readyForWidgetNavigation(String requestId) {
             runOnUiThread(() -> {
+                widgetNavigationReady = true;
                 dispatchWidgetNavigation();
                 sendResult(requestId, true, "ok");
             });
