@@ -12,14 +12,16 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.view.View;
 import android.widget.RemoteViews;
-import android.widget.GridLayout;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -29,7 +31,9 @@ import java.util.Map;
  * 데이터는 MainActivity의 CloudAccountBridge가 SharedPreferences의
  * "calendar_widget_v1_json" 키로 저장한 위젯 전용 snapshot에서 읽는다.
  * snapshot 형식:
- *   {"version":1,"updatedAt":"...","days":{"2026-08-08":{"open":2,"completed":1,...}}}
+ *   {"version":2,"updatedAt":"...","days":{"2026-08-08":{
+ *     "open":2,"completed":1,"items":["○ 일정","✓ 완료"]
+ *   }}}
  *
  * 위젯은 보기 전용이며 날짜·월·오늘 클릭 시 MainActivity로 Intent를 보낸다.
  */
@@ -43,6 +47,14 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
 
     // 요일 헤더. 월요일 시작으로 앱의 주간 페이지 순서와 맞춘다.
     private static final String[] WEEKDAYS = {"월", "화", "수", "목", "금", "토", "일"};
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        super.onReceive(context, intent);
+        if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction())) {
+            refreshWidgets(context);
+        }
+    }
 
     @Override
     public void onUpdate(Context context, AppWidgetManager manager, int[] ids) {
@@ -84,55 +96,40 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
 
         views.setTextViewText(R.id.widget_month_label, month.format(MONTH_LABEL));
 
-        // 요일 헤더를 동적 칸으로 채운다.
+        // RemoteViews로 GridLayout에 0dp 칸을 동적으로 넣으면 일부 One UI
+        // 런처에서 모든 칸이 0픽셀로 접힌다. 가중치가 있는 LinearLayout 행을
+        // 사용해 7열 × 6행 크기를 런처와 관계없이 확정한다.
         views.removeAllViews(R.id.widget_weekday_row);
         for (String label : WEEKDAYS) {
-            RemoteViews cell = new RemoteViews(context.getPackageName(), R.layout.widget_calendar_cell);
-            cell.setTextViewText(R.id.widget_cell_day, label);
-            cell.setTextColor(R.id.widget_cell_day, Color.parseColor("#8a8478"));
-            cell.setViewVisibility(R.id.widget_cell_dots, View.GONE);
+            RemoteViews cell = new RemoteViews(
+                context.getPackageName(), R.layout.widget_calendar_weekday_cell
+            );
+            cell.setTextViewText(R.id.widget_weekday_label, label);
             views.addView(R.id.widget_weekday_row, cell);
         }
 
-        // 월요일(1)~일요일(7) 기준 시작 열을 계산한다.
-        int firstDayOfWeek = month.atDay(1).getDayOfWeek().getValue(); // 1=MON .. 7=SUN
-        int daysInMonth = month.lengthOfMonth();
-        int prevMonthDays = firstDayOfWeek - 1; // 앞쪽 빈 칸 수
-
         views.removeAllViews(R.id.widget_date_grid);
-
-        // 앞쪽 빈 칸
-        for (int i = 0; i < prevMonthDays; i++) {
-            views.addView(R.id.widget_date_grid, blankCell(context));
-        }
-
-        // 이번 달 날짜
-        for (int day = 1; day <= daysInMonth; day++) {
-            LocalDate date = month.atDay(day);
-            String iso = date.format(ISO);
-            DayCount count = counts.days.get(iso);
-            RemoteViews cell = dateCell(context, day, date.isEqual(today), count);
-            // 날짜별 고유 requestCode와 data URI로 PendingIntent identity를 보장한다.
-            Intent open = new Intent(context, MainActivity.class);
-            open.setAction(Intent.ACTION_VIEW);
-            open.setData(Uri.parse("bulletbook://calendar/" + iso));
-            open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            int requestCode = (int) date.toEpochDay();
-            PendingIntent pi = PendingIntent.getActivity(
-                context, requestCode, open,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        List<LocalDate> dates = visibleDates(month);
+        for (int week = 0; week < 6; week++) {
+            RemoteViews row = new RemoteViews(
+                context.getPackageName(), R.layout.widget_calendar_row
             );
-            cell.setOnClickPendingIntent(R.id.widget_cell_root, pi);
-            views.addView(R.id.widget_date_grid, cell);
-        }
-
-        // 뒤쪽 빈 칸으로 마지막 줄을 7칸 단위로 맞춘다.
-        int used = prevMonthDays + daysInMonth;
-        int remainder = used % 7;
-        if (remainder != 0) {
-            for (int i = 0; i < 7 - remainder; i++) {
-                views.addView(R.id.widget_date_grid, blankCell(context));
+            for (int weekday = 0; weekday < 7; weekday++) {
+                LocalDate date = dates.get(week * 7 + weekday);
+                String iso = date.format(ISO);
+                RemoteViews cell = dateCell(
+                    context,
+                    date,
+                    YearMonth.from(date).equals(month),
+                    date.isEqual(today),
+                    counts.days.get(iso)
+                );
+                cell.setOnClickPendingIntent(
+                    R.id.widget_cell_root, datePendingIntent(context, date)
+                );
+                row.addView(R.id.widget_calendar_row, cell);
             }
+            views.addView(R.id.widget_date_grid, row);
         }
 
         // 월 라벨 클릭 → 해당 월의 월간 페이지
@@ -160,56 +157,86 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         manager.updateAppWidget(widgetId, views);
     }
 
-    private static RemoteViews blankCell(Context context) {
-        RemoteViews cell = new RemoteViews(context.getPackageName(), R.layout.widget_calendar_cell);
-        cell.setTextViewText(R.id.widget_cell_day, "");
-        cell.setViewVisibility(R.id.widget_cell_dots, View.GONE);
-        return cell;
+    static List<LocalDate> visibleDates(YearMonth month) {
+        LocalDate first = month.atDay(1);
+        LocalDate start = first.minusDays(first.getDayOfWeek().getValue() - 1L);
+        List<LocalDate> dates = new ArrayList<>(42);
+        for (int index = 0; index < 42; index++) {
+            dates.add(start.plusDays(index));
+        }
+        return dates;
+    }
+
+    private static PendingIntent datePendingIntent(Context context, LocalDate date) {
+        String iso = date.format(ISO);
+        Intent open = new Intent(context, MainActivity.class);
+        open.setAction(Intent.ACTION_VIEW);
+        open.setData(Uri.parse("bulletbook://calendar/" + iso));
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        return PendingIntent.getActivity(
+            context,
+            (int) date.toEpochDay(),
+            open,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
     }
 
     private static RemoteViews dateCell(
-        Context context, int day, boolean isToday, DayCount count
+        Context context,
+        LocalDate date,
+        boolean isCurrentMonth,
+        boolean isToday,
+        DayCount count
     ) {
         RemoteViews cell = new RemoteViews(context.getPackageName(), R.layout.widget_calendar_cell);
-        cell.setTextViewText(R.id.widget_cell_day, String.valueOf(day));
+        cell.setTextViewText(R.id.widget_cell_day, String.valueOf(date.getDayOfMonth()));
         if (isToday) {
             cell.setTextColor(R.id.widget_cell_day, Color.parseColor("#ffffff"));
             cell.setInt(R.id.widget_cell_day, "setBackgroundResource", R.drawable.widget_today_background);
         } else {
-            cell.setTextColor(R.id.widget_cell_day, Color.parseColor("#20201d"));
+            cell.setTextColor(
+                R.id.widget_cell_day,
+                Color.parseColor(isCurrentMonth ? "#20201d" : "#9c978d")
+            );
             cell.setInt(R.id.widget_cell_day, "setBackgroundResource", 0);
         }
 
-        String dots = buildDots(count);
-        if (dots.isEmpty()) {
+        String summary = eventSummary(count);
+        if (summary.isEmpty()) {
             cell.setViewVisibility(R.id.widget_cell_dots, View.GONE);
         } else {
             cell.setViewVisibility(R.id.widget_cell_dots, View.VISIBLE);
-            cell.setTextViewText(R.id.widget_cell_dots, dots);
-            cell.setTextColor(R.id.widget_cell_dots, Color.parseColor("#c0560a"));
+            cell.setTextViewText(R.id.widget_cell_dots, summary);
+            cell.setTextColor(
+                R.id.widget_cell_dots,
+                Color.parseColor(isCurrentMonth ? "#504b43" : "#a39d92")
+            );
         }
         return cell;
     }
 
-    /**
-     * 일정 수에 따라 점 표시를 만든다.
-     * 완료된 일정은 회색 점, 미완료는 주황 점으로 구분.
-     * 3개 이상이면 점 3개 + 숫자로 표시한다.
-     */
-    private static String buildDots(DayCount count) {
+    /** 일정 제목을 최대 세 줄로 만들고, 이전 snapshot이면 점으로 대체한다. */
+    static String eventSummary(DayCount count) {
         if (count == null) return "";
         int open = count.open + count.migrated + count.scheduled;
         int completed = count.completed;
         int total = open + completed;
         if (total == 0) return "";
-        if (total <= 3) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < open && sb.length() < 3; i++) sb.append("●");
-            for (int i = 0; i < completed && sb.length() < 3; i++) sb.append("◌");
-            return sb.toString();
+        if (!count.items.isEmpty()) {
+            int shown = Math.min(count.items.size(), total > count.items.size() ? 2 : 3);
+            StringBuilder summary = new StringBuilder();
+            for (int index = 0; index < shown; index++) {
+                if (summary.length() > 0) summary.append('\n');
+                summary.append(count.items.get(index));
+            }
+            int remaining = total - shown;
+            if (remaining > 0) summary.append("\n+").append(remaining);
+            return summary.toString();
         }
-        // 4개 이상: 점 3개로 축약하고 우측에 총 개수를 표시
-        return "●●● " + total;
+        StringBuilder dots = new StringBuilder();
+        for (int index = 0; index < Math.min(total, 3); index++) dots.append("●");
+        if (total > 3) dots.append(' ').append(total);
+        return dots.toString();
     }
 
     /** SharedPreferences에서 snapshot을 읽어 날짜별 카운트 맵으로 변환한다. */
@@ -231,6 +258,15 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
                 dc.completed = entry.optInt("completed", 0);
                 dc.migrated = entry.optInt("migrated", 0);
                 dc.scheduled = entry.optInt("scheduled", 0);
+                JSONArray items = entry.optJSONArray("items");
+                if (items != null) {
+                    for (int index = 0; index < Math.min(items.length(), 3); index++) {
+                        String item = items.optString(index, "").replaceAll("\\s+", " ").trim();
+                        if (!item.isEmpty()) {
+                            dc.items.add(item.substring(0, Math.min(item.length(), 80)));
+                        }
+                    }
+                }
                 result.days.put(key, dc);
             }
         } catch (Exception ignored) {
@@ -281,5 +317,6 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         int completed;
         int migrated;
         int scheduled;
+        final List<String> items = new ArrayList<>();
     }
 }

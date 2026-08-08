@@ -38,19 +38,17 @@
     </LinearLayout>
 
     <!-- 요일 행 -->
-    <GridLayout
+    <LinearLayout
         android:id="@+id/widget_weekday_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:columnCount="7"
-        android:rowCount="1" />
+        android:orientation="horizontal" />
 
     <!-- 날짜 그리드: 7열 × 6행 -->
-    <GridLayout
+    <LinearLayout
         android:id="@+id/widget_date_grid"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:columnCount="7"
-        android:rowCount="6" />
+        android:orientation="vertical" />
 </LinearLayout>

@@ -2,26 +2,36 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_cell_root"
     android:layout_width="0dp"
-    android:layout_height="0dp"
+    android:layout_height="match_parent"
+    android:layout_weight="1"
     android:orientation="vertical"
-    android:gravity="center_horizontal|top"
-    android:padding="2dp">
+    android:gravity="start|top"
+    android:background="@drawable/widget_cell_background"
+    android:padding="1dp">
 
     <TextView
         android:id="@+id/widget_cell_day"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:minWidth="18dp"
+        android:gravity="center"
+        android:includeFontPadding="false"
         android:textColor="#20201d"
-        android:textSize="13sp"
+        android:textSize="11sp"
         android:textStyle="normal"
         android:text="" />
 
     <TextView
         android:id="@+id/widget_cell_dots"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="#c0560a"
-        android:textSize="9sp"
-        android:lineSpacingExtra="-3dp"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:textColor="#504b43"
+        android:textSize="8sp"
+        android:gravity="start|top"
+        android:includeFontPadding="false"
+        android:maxLines="3"
+        android:ellipsize="end"
+        android:lineSpacingExtra="-1dp"
         android:text="" />
 </LinearLayout>
