@@ -1367,9 +1367,10 @@
   }
 
   // ---- 홈 화면 캘린더 위젯용 snapshot ----
-  // .buj 전체 구조 대신, 위젯이 날짜별 일정 수만 알 수 있도록 요약본을 만든다.
+  // .buj 전체 구조 대신, 위젯이 날짜별 일정 수와 짧은 제목만 알 수 있도록
+  // 요약본을 만든다. 제목은 홈 화면 달력 칸 안에 최대 세 개까지 표시한다.
   // 향후 goalSystem.missions(반복 일정) projection을 이 함수 안에 추가하면
-  // 위젯에도 반복 일정이 반영된다. V1에서는 명시 calendarEvents만 사용한다.
+  // 위젯에도 반복 일정이 반영된다. V2에서는 명시 calendarEvents만 사용한다.
   let lastWidgetSnapshotJson = "";
   let widgetNativeSequence = 0;
 
@@ -1379,15 +1380,19 @@
       const date = String(event?.date || "");
       if (!date) continue;
       const bucket = days[date] || (days[date] = {
-        open: 0, completed: 0, migrated: 0, scheduled: 0,
+        open: 0, completed: 0, migrated: 0, scheduled: 0, items: [],
       });
       const status = event.status || "open";
       if (status === "completed") bucket.completed += 1;
       else if (status === "migrated") bucket.migrated += 1;
       else if (status === "scheduled") bucket.scheduled += 1;
       else bucket.open += 1;
+      const item = calendarEventText(event).replace(/\s+/g, " ").trim().slice(0, 80);
+      if (item && bucket.items.length < 3 && !bucket.items.includes(item)) {
+        bucket.items.push(item);
+      }
     }
-    return { version: 1, days };
+    return { version: 2, days };
   }
 
   function syncCalendarWidget() {
