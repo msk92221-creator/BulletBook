@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#f3f0e7"
+    android:padding="10dp">
+
+    <!-- 헤더: 월/연도 + 오늘 버튼 -->
+    <LinearLayout
+        android:id="@+id/widget_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="6dp">
+
+        <TextView
+            android:id="@+id/widget_month_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#20201d"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:text="2026년 8월" />
+
+        <TextView
+            android:id="@+id/widget_today_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#8a4a00"
+            android:textSize="13sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="4dp"
+            android:text="오늘" />
+    </LinearLayout>
+
+    <!-- 요일 행 -->
+    <GridLayout
+        android:id="@+id/widget_weekday_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:columnCount="7"
+        android:rowCount="1" />
+
+    <!-- 날짜 그리드: 7열 × 6행 -->
+    <GridLayout
+        android:id="@+id/widget_date_grid"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:columnCount="7"
+        android:rowCount="6" />
+</LinearLayout>

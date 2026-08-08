@@ -76,6 +76,10 @@ public class MainActivity extends BridgeActivity {
     private WebView webView;
     private Handler loginPollHandler;
     private long lastBackPressedAt;
+    // 위젯 날짜/월 클릭으로 온 Intent를 WebView 준비 전까지 보관한다.
+    private String pendingWidgetDate;
+    private String pendingWidgetMonth;
+    private boolean widgetNavigationDispatched;
     private final Runnable automaticLoginPoll = () -> cloudExecutor.execute(() -> {
         try {
             JSONObject result = pollPendingLoginOnce();
@@ -133,6 +137,59 @@ public class MainActivity extends BridgeActivity {
         });
         restorePendingLogin();
         scheduleAutomaticLoginPoll(0L);
+        captureWidgetIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        captureWidgetIntent(intent);
+        // 앱이 이미 떠 있으면 JS가 준비되어 있으니 바로 전달한다.
+        dispatchWidgetNavigation();
+    }
+
+    /** 위젯이 보낸 bulletbook://calendar/YYYY-MM-DD 또는 bulletbook://month/YYYY-MM을 보관한다. */
+    private void captureWidgetIntent(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
+        Uri data = intent.getData();
+        if (data == null) return;
+        String host = data.getHost();
+        String path = data.getLastPathSegment();
+        if (host == null || path == null) return;
+        if ("calendar".equals(host)) {
+            pendingWidgetDate = path;
+            widgetNavigationDispatched = false;
+        } else if ("month".equals(host)) {
+            pendingWidgetMonth = path;
+            widgetNavigationDispatched = false;
+        }
+    }
+
+    /**
+     * 보관된 위젯 딥링크를 WebView의 JS 콜백으로 넘긴다.
+     * 실제 트리거는 CloudAccountBridge.readyForWidgetNavigation()에서 이 메서드를 부른다.
+     */
+    private void dispatchWidgetNavigation() {
+        if (widgetNavigationDispatched) return;
+        String date = pendingWidgetDate;
+        String month = pendingWidgetMonth;
+        if (date == null && month == null) return;
+        if (webView == null) return;
+        widgetNavigationDispatched = true;
+        try {
+            if (date != null) {
+                webView.evaluateJavascript(
+                    "(window.__bulletBookOpenWidgetDate||function(){})('" + date + "');", null);
+                pendingWidgetDate = null;
+            } else if (month != null) {
+                webView.evaluateJavascript(
+                    "(window.__bulletBookOpenWidgetMonth||function(){})('" + month + "');", null);
+                pendingWidgetMonth = null;
+            }
+        } catch (Exception ignored) {
+            widgetNavigationDispatched = false;
+        }
     }
 
     private void handleAppBackPressed() {
@@ -1101,6 +1158,33 @@ public class MainActivity extends BridgeActivity {
                 clearPendingLogin();
                 clearToken();
                 sendResult(requestId, true, "disconnected");
+            });
+        }
+
+        // 위젯 전용 일정 snapshot을 받아 SharedPreferences에 저장하고 위젯을 갱신한다.
+        // .buj 구조 전체를 native가 이해하지 않도록 JS에서 요약본만 보낸다.
+        @JavascriptInterface
+        public void pushCalendarWidget(String requestId, String json) {
+            cloudExecutor.execute(() -> {
+                try {
+                    preferences().edit()
+                        .putString("calendar_widget_v1_json", json == null ? "" : json)
+                        .apply();
+                    runOnUiThread(() ->
+                        CalendarWidgetProvider.refreshWidgets(MainActivity.this));
+                    sendResult(requestId, true, "ok");
+                } catch (Exception error) {
+                    sendError(requestId, "WIDGET_SYNC_ERROR", error.getMessage());
+                }
+            });
+        }
+
+        // WebView(app.js)가 초기화를 마친 뒤 보관된 위젯 딥링크를 전달해 달라고 알린다.
+        @JavascriptInterface
+        public void readyForWidgetNavigation(String requestId) {
+            runOnUiThread(() -> {
+                dispatchWidgetNavigation();
+                sendResult(requestId, true, "ok");
             });
         }
     }

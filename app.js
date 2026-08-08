@@ -1366,6 +1366,46 @@
     return event;
   }
 
+  // ---- 홈 화면 캘린더 위젯용 snapshot ----
+  // .buj 전체 구조 대신, 위젯이 날짜별 일정 수만 알 수 있도록 요약본을 만든다.
+  // 향후 goalSystem.missions(반복 일정) projection을 이 함수 안에 추가하면
+  // 위젯에도 반복 일정이 반영된다. V1에서는 명시 calendarEvents만 사용한다.
+  let lastWidgetSnapshotJson = "";
+  let widgetNativeSequence = 0;
+
+  function buildCalendarWidgetSnapshot() {
+    const days = {};
+    for (const event of book.calendarEvents || []) {
+      const date = String(event?.date || "");
+      if (!date) continue;
+      const bucket = days[date] || (days[date] = {
+        open: 0, completed: 0, migrated: 0, scheduled: 0,
+      });
+      const status = event.status || "open";
+      if (status === "completed") bucket.completed += 1;
+      else if (status === "migrated") bucket.migrated += 1;
+      else if (status === "scheduled") bucket.scheduled += 1;
+      else bucket.open += 1;
+    }
+    return { version: 1, updatedAt: new Date().toISOString(), days };
+  }
+
+  function syncCalendarWidget() {
+    if (!isAndroidApp) return;
+    const native = window.BulletBookNative;
+    if (!native?.pushCalendarWidget) return;
+    const snapshot = buildCalendarWidgetSnapshot();
+    const json = JSON.stringify(snapshot);
+    if (json === lastWidgetSnapshotJson) return; // 변경이 없으면 다시 보내지 않는다.
+    lastWidgetSnapshotJson = json;
+    const requestId = `widget-${Date.now()}-${++widgetNativeSequence}`;
+    try {
+      native.pushCalendarWidget(requestId, json);
+    } catch {
+      // 위젯 동기화 실패가 앱 본 기능을 방해하지 않도록 조용히 넘긴다.
+    }
+  }
+
   // 일정을 칸 안에 놓을 때 쓰는 지오메트리. mobileWriteTargetsForPage의 같은
   // id를 가진 타깃과 반드시 같은 값을 써야 일정 줄과 손으로 쓴 기록이 같은
   // 모눈 위에서 나란히 정렬된다.
@@ -7482,6 +7522,7 @@
       refs.saveState.textContent = "저장 중…";
     }
     if (scheduleCloud) cloudSync?.scheduleUpload();
+    syncCalendarWidget();
     return true;
   }
 
@@ -7810,6 +7851,7 @@
       refs.bookTitle.value = book.title || "나의 불렛북";
       initializeHistory();
       renderAll();
+      lastWidgetSnapshotJson = "";
       await saveBook();
       showToast("불렛북을 불러왔습니다");
     } catch {
@@ -7913,6 +7955,7 @@
     refs.bookTitle.value = book.title || "나의 불렛북";
     initializeHistory();
     renderAll();
+    lastWidgetSnapshotJson = "";
     await saveBook();
     refs.recoveryDialog.close();
     showToast("선택한 복구본으로 되돌렸습니다");
@@ -8164,6 +8207,9 @@
       refs.saveState.textContent = "저장 실패";
       throw new Error("OneDrive 문서를 기기에 저장하지 못했습니다.");
     }
+    // 원격 책으로 교체된 직후 위젯을 강제 갱신한다.
+    lastWidgetSnapshotJson = "";
+    syncCalendarWidget();
   }
 
   function stopCloudLoginWatch() {
@@ -8729,6 +8775,19 @@
       requestAnimationFrame(renderAll);
     };
     window.__bulletBookHandleBack = handleAndroidBack;
+    // 위젯 날짜/월 클릭 deep-link. cold start 시 WebView 준비 후 native가 호출한다.
+    window.__bulletBookOpenWidgetDate = value => {
+      const date = dateFromIso(value);
+      if (!date) return;
+      const { page } = ensureDailyPage(date);
+      if (page) navigateToBookPage(page);
+    };
+    window.__bulletBookOpenWidgetMonth = value => {
+      const match = /^(\d{4})-(\d{1,2})$/.exec(String(value || ""));
+      if (!match) return;
+      const result = ensureMonthlyPage(Number(match[1]), Number(match[2]));
+      if (result?.page) navigateToBookPage(result.page);
+    };
     window.addEventListener("afterprint", () => { refs.printBook.innerHTML = ""; });
   }
 
@@ -8772,6 +8831,14 @@
       updateCloudState("error", "동기화 복구 실패 · 기기 문서를 표시합니다");
     }
     if (!localStorage.getItem(WELCOME_KEY)) refs.welcome.showModal();
+    // 앱 초기화 완료 후 위젯에 현재 일정을 반영하고,
+    // cold start로 보관된 위젯 deep-link가 있으면 native에서 전달하게 한다.
+    syncCalendarWidget();
+    const native = window.BulletBookNative;
+    if (native?.readyForWidgetNavigation) {
+      const reqId = `widget-ready-${Date.now()}`;
+      try { native.readyForWidgetNavigation(reqId); } catch { /* ignore */ }
+    }
   }
 
   init();

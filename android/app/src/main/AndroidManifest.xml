@@ -22,7 +22,28 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- 위젯 날짜/월 클릭으로 보내지는 bulletbook:// 딥링크를 받는다. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="bulletbook" android:host="calendar" />
+                <data android:scheme="bulletbook" android:host="month" />
+            </intent-filter>
+
         </activity>
+
+        <!-- 홈 화면 1개월 캘린더 위젯. 보기 전용이며 snapshot은
+             SharedPreferences("bulletbook_cloud")의 calendar_widget_v1_json에서 읽는다. -->
+        <receiver
+            android:name=".CalendarWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/calendar_widget_info" />
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

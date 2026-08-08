@@ -4,4 +4,5 @@
     <string name="title_activity_main">BulletBook</string>
     <string name="package_name">kr.co.bulletbook.app</string>
     <string name="custom_url_scheme">kr.co.bulletbook.app</string>
+    <string name="widget_calendar_description">이번 달 불렛북 일정 달력</string>
 </resources>
