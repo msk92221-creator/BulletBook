@@ -1,7 +1,8 @@
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +18,7 @@ const CLOUD_FILE_PATH = "/me/drive/special/approot:/BulletBook_sync.buj:/content
 const GITHUB_API_ROOT = "https://api.github.com";
 const GITHUB_REPO = "msk92221-creator/BulletBook";
 const GITHUB_RELEASES_LATEST = `/repos/${GITHUB_REPO}/releases/latest`;
+const TRUSTED_RELEASE_PATH = `/${GITHUB_REPO}/releases/download/`;
 const root = fileURLToPath(new URL(".", import.meta.url));
 const localDataRoot =
   process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local");
@@ -27,6 +29,10 @@ const requestedPort = Number.parseInt(process.env.BULLETBOOK_PORT || "43117", 10
 const appPort = Number.isFinite(requestedPort) && requestedPort > 0
   ? requestedPort
   : 43117;
+const expectedHost = `127.0.0.1:${appPort}`;
+const expectedOrigin = `http://${expectedHost}`;
+const sessionCookieName = "BulletBookSession";
+const apiSessionToken = randomBytes(32).toString("hex");
 
 if (typeof fetch !== "function") {
   console.error("[ERROR] BulletBook 자동 동기화에는 Node.js 18 이상이 필요합니다.");
@@ -336,6 +342,40 @@ async function writeCloudBook(content) {
   }
 }
 
+function assertLocalHost(request) {
+  if (String(request.headers.host || "").toLowerCase() !== expectedHost) {
+    throw new AppError("허용되지 않은 요청 주소입니다.", "FORBIDDEN", 403);
+  }
+}
+
+function requestHasSessionCookie(request) {
+  const header = String(request.headers.cookie || "");
+  return header.split(";").some(part => {
+    const [name, ...rest] = part.trim().split("=");
+    return name === sessionCookieName && rest.join("=") === apiSessionToken;
+  });
+}
+
+function authorizeApiRequest(request, pathname) {
+  if (pathname === "/api/health") return;
+  const origin = String(request.headers.origin || "");
+  if (origin && origin !== expectedOrigin) {
+    throw new AppError("다른 화면에서 보낸 요청은 허용되지 않습니다.", "FORBIDDEN", 403);
+  }
+  if (!requestHasSessionCookie(request)) {
+    throw new AppError("앱 세션을 확인할 수 없습니다.", "FORBIDDEN", 403);
+  }
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method || "")) {
+    const contentType = String(request.headers["content-type"] || "").toLowerCase();
+    if (!contentType.startsWith("application/json")) {
+      throw new AppError("JSON 요청만 허용됩니다.", "UNSUPPORTED_MEDIA_TYPE", 415);
+    }
+  }
+}
+
+function quotePowerShellLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
 function sendJson(response, status, value) {
   const body = JSON.stringify(value);
   response.writeHead(status, {
@@ -433,6 +473,7 @@ async function findWindowsUpdate() {
     currentVersion: current,
     name: best.name,
     itemId: best.browser_download_url,
+    digest: String(best.digest || ""),
     size: Number(best.size) || 0,
     latestVersion,
   };
@@ -453,12 +494,37 @@ function runPowerShell(args) {
   });
 }
 
-// 실행 중인 폴더를 덮어쓰면 위험하므로, 형제 폴더에 새 버전을 풀어 놓고
-// 그 위치를 알려 준다. 사용자가 새 폴더의 시작 파일을 실행하면 된다.
-// itemId 자리에는 GitHub asset의 직접 다운로드 URL(browser_download_url)이 들어온다.
-async function applyWindowsUpdate(itemId) {
-  if (!itemId) {
-    throw new AppError("설치할 업데이트 파일이 없습니다.", "NO_ITEM", 400);
+function isTrustedReleaseAsset(address) {
+  try {
+    const url = new URL(String(address || ""));
+    return url.protocol === "https:" &&
+      url.hostname === "github.com" &&
+      url.pathname.startsWith(TRUSTED_RELEASE_PATH);
+  } catch {
+    return false;
+  }
+}
+
+function verifyReleaseDigest(bytes, expectedDigest) {
+  const expected = String(expectedDigest || "").trim().toLowerCase();
+  if (!expected.startsWith("sha256:")) {
+    throw new AppError("업데이트 검증값이 없습니다.", "UPDATE_INTEGRITY", 502);
+  }
+  const actual = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  if (actual !== expected) {
+    throw new AppError("업데이트 파일 검증에 실패했습니다.", "UPDATE_INTEGRITY", 502);
+  }
+}
+
+// 최신 GitHub 릴리스를 서버에서 다시 확인한 뒤 검증된 ZIP만 새 폴더에 푼다.
+async function applyWindowsUpdate() {
+  const update = await findWindowsUpdate();
+  if (!update.available || !update.itemId) {
+    throw new AppError("설치할 새 업데이트가 없습니다.", "NO_UPDATE", 409);
+  }
+  const itemId = String(update.itemId);
+  if (!isTrustedReleaseAsset(itemId)) {
+    throw new AppError("허용되지 않은 업데이트 주소입니다.", "UNTRUSTED_UPDATE", 403);
   }
   const response = await fetch(itemId, {
     redirect: "follow",
@@ -468,45 +534,58 @@ async function applyWindowsUpdate(itemId) {
     throw new AppError("업데이트 파일을 내려받지 못했습니다.", "GITHUB_ERROR", 502);
   }
   const bytes = Buffer.from(await response.arrayBuffer());
+  verifyReleaseDigest(bytes, update.digest);
 
   const parent = dirname(root.replace(/[\\/]$/, ""));
   const staging = join(parent, ".bulletbook-update-tmp");
   await rm(staging, { recursive: true, force: true });
   await mkdir(staging, { recursive: true });
-  const zipPath = join(staging, "update.zip");
-  await writeFile(zipPath, bytes);
-  const extracted = join(staging, "extracted");
-  await runPowerShell([
-    "-Command",
-    `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${extracted}' -Force`,
-  ]);
+  try {
+    const zipPath = join(staging, "update.zip");
+    await writeFile(zipPath, bytes);
+    const extracted = join(staging, "extracted");
+    await runPowerShell([
+      "-Command",
+      `Expand-Archive -LiteralPath ${quotePowerShellLiteral(zipPath)} ` +
+        `-DestinationPath ${quotePowerShellLiteral(extracted)} -Force`,
+    ]);
 
-  // zip 안이 폴더 한 겹으로 감싸져 있으면 그 안을 실제 내용으로 본다.
-  let source = extracted;
-  const entries = await readdir(extracted, { withFileTypes: true });
-  const directories = entries.filter(entry => entry.isDirectory());
-  if (entries.length === 1 && directories.length === 1) {
-    source = join(extracted, directories[0].name);
-  }
+    let source = extracted;
+    const entries = await readdir(extracted, { withFileTypes: true });
+    const directories = entries.filter(entry => entry.isDirectory());
+    if (entries.length === 1 && directories.length === 1) {
+      source = join(extracted, directories[0].name);
+    }
 
-  // 다운로드 URL이나 파일명에서 버전을 읽어 형제 폴더 이름을 정한다.
-  const versionLabel =
-    (/(\d+\.\d+\.\d+)/.exec(itemId) || [])[1] || "new";
-  const destination = join(parent, `BulletBook_Windows_Android_v${versionLabel}`);
-  if (resolve(destination) === resolve(root.replace(/[\\/]$/, ""))) {
-    throw new AppError(
-      "지금 실행 중인 폴더와 같은 이름이라 덮어쓸 수 없습니다.",
-      "SAME_FOLDER",
-      409
-    );
+    const requiredFiles = ["Start_BulletBook.bat", "windows-host.mjs", "VERSION.txt"];
+    for (const requiredFile of requiredFiles) {
+      if (!existsSync(join(source, requiredFile))) {
+        throw new AppError(
+          `업데이트 묶음에 ${requiredFile} 파일이 없습니다.`,
+          "INVALID_PACKAGE",
+          502
+        );
+      }
+    }
+
+    const versionLabel =
+      (/^(\d+\.\d+\.\d+)$/.exec(String(update.latestVersion || "")) || [])[1] || "new";
+    const baseDestination = join(parent, `BulletBook_Windows_Android_v${versionLabel}`);
+    const destination = existsSync(baseDestination)
+      ? `${baseDestination}-update-${Date.now()}`
+      : baseDestination;
+    if (resolve(destination) === resolve(root.replace(/[\\/]$/, ""))) {
+      throw new AppError(
+        "지금 실행 중인 폴더와 같은 이름이라 덮어쓸 수 없습니다.",
+        "SAME_FOLDER",
+        409
+      );
+    }
+    await rename(source, destination);
+    return { installedTo: destination, version: versionLabel };
+  } finally {
+    await rm(staging, { recursive: true, force: true });
   }
-  await rm(destination, { recursive: true, force: true });
-  await runPowerShell([
-    "-Command",
-    `Move-Item -LiteralPath '${source}' -Destination '${destination}' -Force`,
-  ]);
-  await rm(staging, { recursive: true, force: true });
-  return { installedTo: destination, version: versionLabel };
 }
 
 async function handleApi(request, response, pathname) {
@@ -524,8 +603,8 @@ async function handleApi(request, response, pathname) {
     return;
   }
   if (pathname === "/api/update/apply" && request.method === "POST") {
-    const body = JSON.parse((await readRequestBody(request)) || "{}");
-    sendJson(response, 200, await applyWindowsUpdate(body.itemId));
+    await readRequestBody(request);
+    sendJson(response, 200, await applyWindowsUpdate());
     return;
   }
   if (pathname === "/api/cloud/status" && request.method === "GET") {
@@ -581,12 +660,18 @@ async function handleStatic(response, pathname) {
     throw new AppError("파일을 찾을 수 없습니다.", "NOT_FOUND", 404);
   }
   const body = await readFile(join(root, safeName));
-  response.writeHead(200, {
+  const headers = {
     "Content-Type": contentTypes[extname(safeName)] || "application/octet-stream",
     "Content-Length": body.length,
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
-  });
+    "Referrer-Policy": "no-referrer",
+  };
+  if (safeName === "index.html") {
+    headers["Set-Cookie"] =
+      `${sessionCookieName}=${apiSessionToken}; HttpOnly; SameSite=Strict; Path=/`;
+  }
+  response.writeHead(200, headers);
   response.end(body);
 }
 
@@ -597,8 +682,10 @@ const server = createServer(async (request, response) => {
     console.error(`[WARN] 응답 연결 종료: ${error.message}`);
   });
   try {
-    const url = new URL(request.url || "/", "http://127.0.0.1");
+    assertLocalHost(request);
+    const url = new URL(request.url || "/", expectedOrigin);
     if (url.pathname.startsWith("/api/")) {
+      authorizeApiRequest(request, url.pathname);
       await handleApi(request, response, url.pathname);
     } else {
       await handleStatic(response, url.pathname);

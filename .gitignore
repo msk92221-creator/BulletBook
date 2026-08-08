@@ -6,3 +6,5 @@ android/app/build/
 *.apk
 *.aab
 .android-gradle-cache/
+release/
+.release-staging/
