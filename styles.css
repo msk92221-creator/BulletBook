@@ -3104,3 +3104,481 @@ body.resizing-page-list {
 /* 안드로이드에서는 더보기 시트의 업데이트 항목을 쓰므로 사이드바 쪽은 숨긴다. */
 .android-app #desktopUpdateButton,
 .android-app .desktop-update-status { display: none; }
+
+/* UI cohesion system (0.40.0) */
+:root {
+  --ink: #25241f;
+  --muted: #747168;
+  --paper: #ffffff;
+  --cream: #f5f4f1;
+  --panel: #eceae6;
+  --dark: #1d1d1a;
+  --accent: #d3ee58;
+  --accent-strong: #6f850f;
+  --accent-soft: #f1f7d8;
+  --line: #dedbd5;
+  --surface: #ffffff;
+  --surface-muted: #f8f7f4;
+  --danger: #a54840;
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 18px;
+  --focus-ring: 0 0 0 3px rgba(165, 192, 47, .24);
+  --shadow: 0 16px 44px rgba(28, 27, 23, .14);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button {
+  transition: color .16s ease, background-color .16s ease, border-color .16s ease,
+    box-shadow .16s ease, transform .16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #91aa24;
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
+.icon-button,
+.small-icon-button,
+.quiet-button,
+.primary-button,
+.cloud-button,
+.full-button,
+.template-grid button,
+.tool,
+.bullet-palette button,
+.page-nav {
+  border-radius: var(--radius-sm);
+}
+
+.primary-button,
+.cloud-choice-button.primary-choice,
+.recovery-item-actions button:last-child {
+  color: #242916;
+  border-color: #b6ce43;
+  background: var(--accent);
+}
+
+.primary-button:hover,
+.cloud-choice-button.primary-choice:hover,
+.recovery-item-actions button:last-child:hover {
+  background: #def56f;
+}
+
+.topbar {
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  background: var(--dark);
+  box-shadow: 0 4px 18px rgba(25,24,21,.14);
+}
+
+.brand-mark {
+  border-color: rgba(255,255,255,.28);
+  border-radius: 8px 10px 10px 8px;
+}
+
+.topbar .icon-button:hover {
+  background: rgba(255,255,255,.09);
+}
+
+.quiet-button {
+  color: #efede8;
+  background: rgba(255,255,255,.08);
+}
+
+.quiet-button:hover {
+  background: rgba(255,255,255,.14);
+}
+
+.view-switch {
+  border-color: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.06);
+}
+
+.view-switch button.active {
+  color: #252a15;
+  background: var(--accent);
+}
+
+.cloud-button {
+  border: 1px solid rgba(255,255,255,.07);
+  background: rgba(255,255,255,.1);
+}
+
+.cloud-button[data-state="synced"] {
+  color: #252a15;
+  border-color: #b6ce43;
+  background: var(--accent);
+}
+
+.sidebar {
+  border-color: var(--line);
+  background: #faf9f7;
+}
+
+.sidebar-section {
+  padding: 16px;
+}
+
+.sidebar-header {
+  padding-bottom: 9px;
+}
+
+.eyebrow {
+  color: #969188;
+  letter-spacing: .12em;
+}
+
+.sidebar .eyebrow {
+  display: none;
+}
+
+.page-list {
+  padding-right: 8px;
+  padding-left: 8px;
+}
+
+.page-item {
+  min-height: 42px;
+  margin: 1px 0;
+  border-radius: var(--radius-sm);
+}
+
+.page-item:hover {
+  background: #f0efeb;
+}
+
+.page-item.active {
+  background: #f6f5f1;
+}
+
+.page-item.current,
+.page-item.current.multi-selected {
+  color: #30351b;
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 #9eb72c;
+}
+
+.page-group-header {
+  min-height: 38px;
+  border-radius: var(--radius-sm);
+  background: #efeee9;
+}
+
+.group-count {
+  background: rgba(255,255,255,.78);
+}
+
+.templates {
+  border-color: var(--line);
+}
+
+.template-grid {
+  gap: 8px;
+}
+
+.template-grid button {
+  min-height: 42px;
+  border-color: transparent;
+  background: var(--surface-muted);
+}
+
+.template-grid button:hover {
+  border-color: #d5d1ca;
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgba(39,37,31,.07);
+}
+
+.template-grid button span {
+  border-radius: var(--radius-sm);
+  color: #52630a;
+  background: var(--accent-soft);
+}
+
+.page-group-control select,
+.full-button {
+  min-height: 38px;
+  border-color: var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.full-button:hover {
+  border-color: #c5c0b8;
+  background: var(--surface-muted);
+}
+
+.danger-link {
+  color: var(--danger);
+}
+
+.toolstrip {
+  border-color: var(--line);
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 3px 12px rgba(36,34,29,.04);
+}
+
+.tool:hover,
+.bullet-palette button:hover {
+  background: #f1f0ec;
+}
+
+.tool.active {
+  color: #3e4b08;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px #d7e89b;
+}
+
+.tool-divider,
+.bullet-palette-divider {
+  background: var(--line);
+}
+
+.color-control,
+.font-size-control input,
+.font-size-step {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.font-size-control input:focus,
+.mobile-write-field input:focus,
+.mobile-write-field select:focus,
+.mobile-write-field textarea:focus,
+.mobile-search-input:focus,
+.calendar-event-row input:focus {
+  border-color: #9caf3e;
+  box-shadow: var(--focus-ring);
+}
+
+.book-viewport {
+  background: #f2f1ed;
+}
+
+.page-nav {
+  width: 38px;
+  height: 64px;
+  border: 1px solid rgba(45,43,37,.08);
+  color: #605d55;
+  background: rgba(255,255,255,.88);
+  box-shadow: 0 6px 18px rgba(35,33,28,.1);
+  backdrop-filter: blur(8px);
+}
+
+.page-nav:hover {
+  color: #343229;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(35,33,28,.14);
+}
+
+.statusbar {
+  color: #8b877e;
+  border-top-color: var(--line);
+  background: #faf9f7;
+}
+
+.welcome-dialog,
+.cloud-connect-dialog,
+.group-edit-dialog,
+.recovery-dialog,
+.goal-hub-dialog,
+.goal-editor-dialog,
+.calendar-event-dialog,
+.mobile-search-dialog,
+.mobile-more-dialog,
+.mobile-page-write-dialog,
+.mobile-text-context-dialog {
+  border-radius: var(--radius-lg);
+  background: #faf9f7;
+  box-shadow: 0 24px 72px rgba(24,23,20,.28);
+}
+
+.welcome-dialog::backdrop,
+.cloud-connect-dialog::backdrop,
+.group-edit-dialog::backdrop,
+.recovery-dialog::backdrop,
+.goal-hub-dialog::backdrop,
+.goal-editor-dialog::backdrop,
+.calendar-event-dialog::backdrop,
+.mobile-search-dialog::backdrop,
+.mobile-more-dialog::backdrop,
+.mobile-page-write-dialog::backdrop,
+.mobile-text-context-dialog::backdrop {
+  background: rgba(28,27,24,.56);
+  backdrop-filter: blur(5px);
+}
+
+.sheet-header {
+  min-height: 64px;
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.sheet-header .icon-button:hover {
+  background: #f0efeb;
+}
+
+.mobile-write-field input,
+.mobile-write-field select,
+.mobile-write-field textarea,
+.mobile-search-input,
+.calendar-event-row input {
+  border-color: var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.mobile-write-target-field,
+.mobile-write-symbol-field,
+.mobile-context-bullet-field,
+.goal-area-card,
+.goal-outcome-card,
+.recovery-item,
+.mobile-view-setting,
+.mobile-more-actions {
+  border-color: var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.mobile-write-targets button,
+.mobile-write-symbols button,
+.mobile-write-mode-switch button,
+.calendar-event-row-status button {
+  min-height: 40px;
+  border-color: var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.mobile-write-targets button.active,
+.mobile-write-symbols button.active,
+.mobile-write-mode-switch button.active,
+.calendar-event-row-status button.active {
+  color: #3e4b08;
+  border-color: #afc53f;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(145,170,36,.18);
+}
+
+.mobile-write-submit {
+  min-height: 48px;
+  border-radius: var(--radius-md);
+}
+
+.mobile-bottom-nav {
+  border-color: var(--line);
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 -8px 28px rgba(29,28,24,.1);
+}
+
+.mobile-bottom-nav button {
+  min-height: 48px;
+  border-radius: var(--radius-md);
+  color: #68655d;
+}
+
+.mobile-bottom-nav button:active {
+  background: #f0efeb;
+}
+
+.android-app .mobile-bottom-nav .page-write-nav-button {
+  margin: 3px 6px;
+  color: #252a15;
+  background: var(--accent);
+  box-shadow: 0 5px 14px rgba(104,125,14,.2);
+}
+
+.android-app .mobile-bottom-nav .page-write-nav-button > span {
+  color: inherit;
+}
+
+.android-app .topbar {
+  border-bottom-color: rgba(255,255,255,.05);
+}
+
+.android-app .page-item.current {
+  color: #30351b;
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 #9eb72c;
+}
+
+.android-app .mobile-more-actions {
+  border-color: var(--line);
+  border-radius: var(--radius-md);
+}
+
+@media (min-width: 981px) {
+  .app-shell {
+    grid-template-columns: 272px minmax(0, 1fr);
+    grid-template-rows: calc(64px + var(--safe-top)) minmax(0, 1fr);
+  }
+
+  .topbar {
+    gap: 16px;
+    padding:
+      var(--safe-top)
+      calc(18px + var(--safe-right))
+      0
+      calc(18px + var(--safe-left));
+  }
+
+  .brand {
+    min-width: 226px;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 40px;
+  }
+
+  .book-title {
+    width: 184px;
+  }
+
+  .top-actions {
+    gap: 6px;
+  }
+
+  .workspace {
+    grid-template-rows: 56px minmax(0, 1fr) calc(28px + var(--safe-bottom));
+  }
+
+  .toolstrip {
+    padding:
+      6px
+      calc(14px + var(--safe-right))
+      6px
+      calc(14px + var(--safe-left));
+  }
+
+  .tool {
+    min-width: 50px;
+    height: 42px;
+  }
+}
+
+@media (max-width: 720px) {
+  .toolstrip {
+    scrollbar-width: none;
+  }
+
+  .toolstrip::-webkit-scrollbar {
+    display: none;
+  }
+}
