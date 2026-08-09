@@ -9036,9 +9036,10 @@
       activePageId = daily.page.id;
       selection = null;
       renderAll();
-      // 쓰기 다이얼로그를 띄우면 일간 페이지를 덮고 키보드까지 올라와
-      // 해당 날짜 페이지가 보이지 않으므로 열지 않고 토스트로만 안내한다.
-      showToast(`${dailyDateLabel(date)} 일간 페이지를 열었습니다.`);
+      // 위젯 탭은 곧바로 글 작성으로 이어지도록 쓰기 시트를 연다.
+      // 바로 위 페이지 이동이 activePageId를 일간 페이지로 맞춰
+      // 시트의 기록할 페이지 드롭다운이 해당 날짜로 기본 선택된다.
+      openMobilePageWrite({ date: isoDate(date) });
       return true;
     };
     window.__bulletBookOpenWidgetMonth = value => {
