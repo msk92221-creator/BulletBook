@@ -1154,6 +1154,116 @@
     value.calendarEvents = events.filter(event => keep.has(event.id));
   }
 
+  function missionDuplicateSignature(mission) {
+    const schedule = String(mission?.schedule || "daily");
+    const title = String(mission?.title || "").replace(/\s+/g, " ").trim().toLocaleLowerCase("ko-KR");
+    const signature = [String(mission?.goalId || ""), title, String(mission?.bulletBase || "dot"), schedule];
+    if (schedule === "weekly") signature.push(Number(mission.weeklyTarget) || 1);
+    if (schedule === "custom") signature.push(...(mission.weekdays || []).map(Number).sort((a, b) => a - b));
+    if (schedule === "once") signature.push(normalizedDateOrBlank(mission.scheduledDate));
+    if (schedule === "monthly-date") signature.push(Number(mission.monthDay) || 1);
+    if (schedule === "yearly-date") signature.push(Number(mission.yearMonth) || 1, Number(mission.yearDay) || 1);
+    if (schedule === "interval") {
+      signature.push(
+        normalizedDateOrBlank(mission.intervalStart),
+        String(mission.intervalUnit || "day"),
+        Number(mission.intervalCount) || 1
+      );
+    }
+    return JSON.stringify(signature);
+  }
+
+  // 날짜 일정만 지워도 반복 루틴 원본은 남는다. 같은 루틴을 다시 만들거나
+  // 두 기기의 변경이 합쳐질 때 동일 원본이 여러 개 생기면 날짜별 개수도 함께
+  // 늘어나므로, 같은 목표·이름·불렛·반복 규칙은 하나의 루틴으로 합친다.
+  function dedupeDuplicatedMissions(value) {
+    const system = value?.goalSystem;
+    if (!Array.isArray(system?.missions) || system.missions.length < 2) return 0;
+    const groups = new Map();
+    system.missions.forEach(mission => {
+      const signature = missionDuplicateSignature(mission);
+      if (!groups.has(signature)) groups.set(signature, []);
+      groups.get(signature).push(mission);
+    });
+    const duplicateGroups = [...groups.values()].filter(group => group.length > 1);
+    if (!duplicateGroups.length) return 0;
+
+    const canonicalIdByDuplicateId = new Map();
+    const canonicalMissions = [];
+    let removed = 0;
+    groups.forEach(group => {
+      // 기기마다 배열 순서가 달라도 같은 id를 대표로 고르도록 결정적으로 정렬한다.
+      const ordered = [...group].sort((left, right) =>
+        String(left.id).localeCompare(String(right.id))
+      );
+      const canonical = ordered[0];
+      canonical.active = ordered.some(mission => mission.active);
+      const starts = ordered.map(mission => mission.startDate).filter(Boolean).sort();
+      if (starts.length) canonical.startDate = starts[0];
+      ordered.slice(1).forEach(mission => {
+        canonicalIdByDuplicateId.set(mission.id, canonical.id);
+        removed += 1;
+      });
+      canonicalMissions.push(canonical);
+    });
+    system.missions = canonicalMissions;
+
+    (value.pages || []).forEach(page => {
+      const seenMissionRows = new Set();
+      page.elements = (page.elements || []).filter(element => {
+        const canonicalId = canonicalIdByDuplicateId.get(element.missionId);
+        if (canonicalId) element.missionId = canonicalId;
+        if (!element.missionId) return true;
+        const date = element.missionDate || page.pageDate || "";
+        const key = JSON.stringify([element.missionId, date, element.layoutTarget || ""]);
+        if (seenMissionRows.has(key)) return false;
+        seenMissionRows.add(key);
+        return true;
+      });
+    });
+
+    const bestEventByKey = new Map();
+    (value.calendarEvents || []).forEach(event => {
+      const canonicalId = canonicalIdByDuplicateId.get(event.missionId);
+      if (canonicalId) event.missionId = canonicalId;
+      if (!event.missionId) return;
+      const key = `${event.missionId}|${event.date}`;
+      const current = bestEventByKey.get(key);
+      const score = item => (item.status ? 2 : 0) + (item.column ? 1 : 0);
+      if (!current || score(event) > score(current)) bestEventByKey.set(key, event);
+    });
+    const emittedMissionDates = new Set();
+    value.calendarEvents = (value.calendarEvents || []).filter(event => {
+      if (!event.missionId) return true;
+      const key = `${event.missionId}|${event.date}`;
+      if (emittedMissionDates.has(key) || bestEventByKey.get(key) !== event) return false;
+      emittedMissionDates.add(key);
+      event.id = `mission-event-${event.missionId}-${event.date}`;
+      return true;
+    });
+    return removed;
+  }
+
+  function removeMissionsFromDate(value, missionIds, dateValue) {
+    const ids = new Set(missionIds || []);
+    const date = normalizedDateOrBlank(dateValue);
+    if (!ids.size || !date) return 0;
+    const before = value.goalSystem.missions.length;
+    value.goalSystem.missions = value.goalSystem.missions
+      .filter(mission => !ids.has(mission.id));
+    value.calendarEvents = (value.calendarEvents || []).filter(event =>
+      !ids.has(event.missionId) || event.date < date
+    );
+    (value.pages || []).forEach(page => {
+      page.elements = (page.elements || []).filter(element => {
+        if (!ids.has(element.missionId)) return true;
+        const missionDate = normalizedDateOrBlank(element.missionDate || page.pageDate);
+        return !missionDate || missionDate < date;
+      });
+    });
+    return before - value.goalSystem.missions.length;
+  }
+
   // 연/월/주 그룹은 페이지를 만들 때 자동으로 생기는데, 그 안의 페이지를 모두
   // 지우면 빈 껍데기만 남아 목록 맨 아래에 "만든 적 없는 그룹"으로 보인다.
   // 사용자가 직접 만든 그룹(kind 없음)은 비어 있어도 그대로 둔다.
@@ -1239,6 +1349,7 @@
     });
     migrateYearCalendarPages(value);
     migrateLegacyCircleTextToEvents(value);
+    dedupeDuplicatedMissions(value);
     // 이미 pair id가 있는 주간 양면은 페이지 순서를 재배치하기 전에 먼저
     // 같은 그룹으로 복구한다. 그렇지 않으면 한쪽이 그룹 밖 맨 아래로 밀린다.
     alignWeeklyPairGroups(value.pages, value.groups);
@@ -1609,6 +1720,7 @@
     const row = document.createElement("div");
     row.className = "calendar-event-row";
     if (event?.id) row.dataset.eventId = event.id;
+    if (event?.missionId) row.dataset.missionId = event.missionId;
     row.dataset.status = ["migrated", "scheduled", "completed"].includes(event?.status)
       ? event.status : "open";
 
@@ -1624,7 +1736,7 @@
     remove.type = "button";
     remove.className = "icon-button danger-icon-button";
     remove.textContent = "×";
-    remove.setAttribute("aria-label", "이 일정 삭제");
+    remove.setAttribute("aria-label", event?.missionId ? "이 반복 루틴 전체 삭제" : "이 일정 삭제");
     remove.addEventListener("click", () => row.remove());
     main.append(input, remove);
 
@@ -1650,7 +1762,14 @@
     });
     updateStatusButtons();
 
-    row.append(main, statusRow);
+    row.append(main);
+    if (event?.missionId) {
+      const routineNote = document.createElement("small");
+      routineNote.className = "calendar-event-routine-note";
+      routineNote.textContent = "반복 루틴 · ×로 지우면 이 날짜부터 반복을 종료합니다";
+      row.append(routineNote);
+    }
+    row.append(statusRow);
     refs.calendarEventRows.append(row);
     return input;
   }
@@ -1677,7 +1796,10 @@
   function saveCalendarEventEditor() {
     const date = normalizedDateOrBlank(editingCalendarDate);
     if (!date) return closeCalendarEventEditor();
-    const before = JSON.stringify(book.calendarEvents || []);
+    const before = JSON.stringify({
+      calendarEvents: book.calendarEvents || [],
+      missions: currentGoalSystem().missions || [],
+    });
     const existing = new Map(calendarEventsForDate(date).map(event => [event.id, event]));
     const keptIds = new Set();
     const now = new Date().toISOString();
@@ -1697,18 +1819,45 @@
           else delete event.status;
           event.updatedAt = now;
         }
+        const mission = event.missionId ? missionById(event.missionId) : null;
+        if (mission && mission.title !== title) {
+          mission.title = title;
+          (book.calendarEvents || []).forEach(candidate => {
+            if (candidate.missionId !== mission.id) return;
+            candidate.title = title;
+            candidate.updatedAt = now;
+          });
+        }
       } else {
         const added = addCalendarEvent(date, title, undefined, status);
         if (added) keptIds.add(added.id);
       }
     });
+    const keptMissionIds = new Set(
+      [...existing.values()]
+        .filter(event => event.missionId && keptIds.has(event.id))
+        .map(event => event.missionId)
+    );
+    const removedMissionIds = new Set(
+      [...existing.values()]
+        .filter(event => event.missionId && !keptIds.has(event.id) && !keptMissionIds.has(event.missionId))
+        .map(event => event.missionId)
+    );
     book.calendarEvents = (book.calendarEvents || []).filter(event =>
       event.date !== date || keptIds.has(event.id)
     );
+    // 지난 수행 기록은 보존하고, 선택한 날짜부터 생성된 반복 일정만 정리한다.
+    const removedRoutineCount = removeMissionsFromDate(book, removedMissionIds, date);
     closeCalendarEventEditor();
-    if (before !== JSON.stringify(book.calendarEvents)) commitHistory();
+    const after = JSON.stringify({
+      calendarEvents: book.calendarEvents || [],
+      missions: currentGoalSystem().missions || [],
+    });
+    if (before !== after) commitHistory();
     renderAll();
-    showToast("날짜 일정을 연간·월간·주간·일간에 반영했습니다");
+    showToast(removedRoutineCount
+      ? `날짜 일정과 반복 루틴 ${removedRoutineCount}개를 함께 정리했습니다`
+      : "날짜 일정을 연간·월간·주간·일간에 반영했습니다");
   }
 
   function movePagesToStructuredGroup(pages, group) {
@@ -2130,7 +2279,14 @@
   }
 
   function missionsDueOn(date) {
-    return currentGoalSystem().missions.filter(mission => missionRunsOnDate(mission, date));
+    const seen = new Set();
+    return currentGoalSystem().missions.filter(mission => {
+      if (!missionRunsOnDate(mission, date)) return false;
+      const signature = missionDuplicateSignature(mission);
+      if (seen.has(signature)) return false;
+      seen.add(signature);
+      return true;
+    });
   }
 
   function missionBulletText(mission) {
@@ -6161,14 +6317,25 @@
       active: true,
       createdAt: new Date().toISOString(),
     };
-    currentGoalSystem().missions.push(mission);
+    const system = currentGoalSystem();
+    const signature = missionDuplicateSignature(mission);
+    const existing = system.missions.find(item => missionDuplicateSignature(item) === signature);
+    if (existing) {
+      existing.active = true;
+      existing.startDate ||= mission.startDate;
+    } else {
+      system.missions.push(mission);
+    }
+    const removedDuplicates = dedupeDuplicatedMissions(book);
     const added = materializeDueMissions();
     commitHistory();
     refs.mobilePageWriteDialog.close();
     renderAll();
-    showToast(added
-      ? `루틴을 만들고 일간·주간 계획 ${added}곳에 반영했습니다`
-      : "루틴을 만들었습니다");
+    showToast(existing || removedDuplicates
+      ? "같은 루틴을 하나로 정리하고 다시 활성화했습니다"
+      : added
+        ? `루틴을 만들고 일간·주간 계획 ${added}곳에 반영했습니다`
+        : "루틴을 만들었습니다");
   }
 
   function openMobileTextContext() {
@@ -8173,6 +8340,11 @@
     refs.sidebarScrim.classList.remove("open");
   }
 
+  function toggleSidebar() {
+    if (refs.sidebar.classList.contains("open")) closeSidebar();
+    else openSidebar();
+  }
+
   function handleAndroidBack() {
     if (refs.calendarEventDialog.open) {
       closeCalendarEventEditor();
@@ -8564,7 +8736,7 @@
     refs.mobileTextContextBackButton.addEventListener("click", () => reorderMobileContextElement(false));
     refs.mobileTextContextDeleteButton.addEventListener("click", deleteMobileContextElement);
     refs.mobileTextContextEditRoutineButton.addEventListener("click", editMobileContextRoutine);
-    refs.mobilePagesButton.addEventListener("click", openSidebar);
+    refs.mobilePagesButton.addEventListener("click", toggleSidebar);
     refs.mobileSearchButton.addEventListener("click", openMobileSearch);
     refs.mobileSearchInput.addEventListener("input", renderMobileSearchResults);
     refs.mobileSearchCloseButton.addEventListener("click", () => refs.mobileSearchDialog.close());
@@ -8616,7 +8788,7 @@
       const restoreButton = event.target.closest("[data-recovery-restore]");
       if (restoreButton) restoreRecoverySnapshot(restoreButton.dataset.recoveryRestore);
     });
-    $("#sidebarToggle").addEventListener("click", openSidebar);
+    $("#sidebarToggle").addEventListener("click", toggleSidebar);
     $("#closeSidebar").addEventListener("click", closeSidebar);
     refs.sidebarScrim.addEventListener("click", closeSidebar);
     refs.cloudButton.addEventListener("click", syncCloudNow);
@@ -8851,6 +9023,20 @@
     window.__bulletBookOpenWidgetDate = value => {
       const date = dateFromIso(value);
       if (!date) return false;
+      const daily = ensureDailyPage(date);
+      // goToToday()와 동일하게 위젯이 가리킨 날짜(오늘이 아님) 기준으로
+      // 일간/주간 페이지에 미션을 채운다.
+      const result = receiveMissionsForDate(date, daily.page);
+      const weekResult = receiveMissionsForWeek(isoDate(mondayOf(date)));
+      if (daily.created || result.added > 0 || weekResult.added > 0) commitHistory();
+      // ensureDailyPage()가 주간 페이지를 함께 삽입해 색인이 밀릴 수 있으므로
+      // daily.index 대신 id로 현재 위치를 다시 찾아야 표지에 머무르지 않는다.
+      const index = book.pages.findIndex(page => page.id === daily.page.id);
+      if (index >= 0) currentIndex = index;
+      activePageId = daily.page.id;
+      selection = null;
+      renderAll();
+      // 위젯 날짜 문맥(mobileWriteDateContext)을 유지하기 위해 쓰기 다이얼로그를 띄운다.
       openMobilePageWrite({ date: isoDate(date) });
       return true;
     };
@@ -8863,8 +9049,15 @@
         const context = monthlyDateContext(candidate);
         return context.hasCalendarDate && context.year === year && context.month === month;
       })());
-      if (page) navigateToBookPage(page);
-      else openMobilePageWrite();
+      if (page) {
+        navigateToBookPage(page);
+      } else {
+        // 월간 페이지가 없으면 새로 만들어 이동한다.
+        // openMobilePageWrite()로 대체하면 표지에 머무르는 버그가 재발하므로 사용하지 않는다.
+        const result = ensureMonthlyPage(year, month);
+        if (result.created) commitHistory();
+        navigateToBookPage(result.page);
+      }
       return true;
     };
     window.addEventListener("afterprint", () => { refs.printBook.innerHTML = ""; });

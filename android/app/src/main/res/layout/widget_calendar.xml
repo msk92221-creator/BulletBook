@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#f3f0e7"
+    android:background="#f8fafc"
     android:padding="10dp">
 
     <LinearLayout
@@ -20,7 +20,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="#20201d"
+            android:textColor="#172033"
             android:textSize="16sp"
             android:textStyle="bold"
             android:text="2026년 8월" />
@@ -30,7 +30,7 @@
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:gravity="center"
-            android:textColor="#5f594f"
+            android:textColor="#315fca"
             android:textSize="22sp"
             android:textStyle="bold"
             android:text="‹"
@@ -41,7 +41,7 @@
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:gravity="center"
-            android:textColor="#5f594f"
+            android:textColor="#315fca"
             android:textSize="22sp"
             android:textStyle="bold"
             android:text="›"
@@ -52,7 +52,7 @@
             android:layout_width="wrap_content"
             android:layout_height="32dp"
             android:gravity="center"
-            android:textColor="#8a4a00"
+            android:textColor="#214fbd"
             android:textSize="13sp"
             android:paddingStart="8dp"
             android:paddingEnd="4dp"

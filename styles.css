@@ -5,8 +5,8 @@
   --cream: #f3f0ef;
   --panel: #e9e5e4;
   --dark: #161512;
-  --accent: #d9ff58;
-  --accent-soft: #efffb6;
+  --accent: #356ae6;
+  --accent-soft: #e7eeff;
   --line: #d1cdcb;
   --page-w: 672;
   --page-h: 1224;
@@ -328,7 +328,7 @@ body.resizing-page-list {
 }
 .page-item.current {
   background: #e5efbd;
-  box-shadow: inset 3px 0 0 #a8c52e;
+  box-shadow: inset 3px 0 0 #356ae6;
 }
 .page-item.multi-selected {
   background: #f2f8d7;
@@ -343,8 +343,8 @@ body.resizing-page-list {
 }
 .page-item.page-reorder-source {
   z-index: 2;
-  background: #efffb6;
-  box-shadow: 0 6px 16px rgba(45, 52, 25, .18), inset 3px 0 0 #9fbd34;
+  background: #e7eeff;
+  box-shadow: 0 6px 16px rgba(45, 52, 25, .18), inset 3px 0 0 #356ae6;
   opacity: .88;
 }
 .page-item.page-drop-before::before,
@@ -385,8 +385,8 @@ body.resizing-page-list {
 .page-group-header.group-reorder-source {
   z-index: 2;
   color: #405000;
-  background: #efffb6;
-  box-shadow: 0 6px 16px rgba(45, 52, 25, .18), inset 3px 0 0 #9fbd34;
+  background: #e7eeff;
+  box-shadow: 0 6px 16px rgba(45, 52, 25, .18), inset 3px 0 0 #356ae6;
   opacity: .88;
 }
 .page-group-header.group-drop-before::before { top: -3px; }
@@ -447,7 +447,7 @@ body.resizing-page-list {
 }
 .page-group-header.page-group-drop-target .group-name::after {
   content: " · 여기에 넣기";
-  color: #718800;
+  color: #214fbd;
   font-weight: 800;
 }
 .group-chevron { font-size: 16px; line-height: 1; }
@@ -634,7 +634,7 @@ body.resizing-page-list {
 }
 
 .tool:hover { background: #efedec; }
-.tool.active { background: var(--accent-soft); box-shadow: inset 0 0 0 1px #d8ef80; }
+.tool.active { background: var(--accent-soft); box-shadow: inset 0 0 0 1px #b7c8f4; }
 .tool-icon { height: 21px; font-size: 18px; line-height: 20px; }
 .tool small { font-size: 10px; }
 .highlight-icon { color: #bbd900; font-size: 25px; }
@@ -907,7 +907,7 @@ body.resizing-page-list {
   left: 54px;
   right: 54px;
   padding-bottom: 13px;
-  border-bottom: 4px solid rgba(211, 255, 67, .68);
+  border-bottom: 4px solid rgba(53, 106, 230, .55);
   font-family: Georgia, "Noto Serif KR", serif;
   font-size: 29px;
   font-style: italic;
@@ -961,12 +961,12 @@ body.resizing-page-list {
 
 .template-editable[contenteditable="true"]:hover {
   background: rgba(217, 255, 88, .18);
-  box-shadow: 0 0 0 1px rgba(159, 189, 52, .45);
+  box-shadow: 0 0 0 1px rgba(53, 106, 230, .45);
 }
 
 .template-editable.editing {
   background: rgba(239, 255, 182, .48);
-  box-shadow: 0 0 0 2px #9fbd34;
+  box-shadow: 0 0 0 2px #356ae6;
 }
 
 .fixed-date-control,
@@ -995,7 +995,7 @@ body.resizing-page-list {
 .monthly-calendar-summary:hover,
 .calendar-event-row-chip:hover,
 .year-calendar-day:hover {
-  background-color: rgba(217,255,88,.25);
+  background-color: rgba(53,106,230,.25);
 }
 .fixed-date-empty {
   display: inline-block;
@@ -1119,7 +1119,7 @@ body.resizing-page-list {
   -webkit-line-clamp: 2;
   overflow-wrap: anywhere;
 }
-.year-calendar-day.has-events { background: rgba(217,255,88,.17); }
+.year-calendar-day.has-events { background: rgba(53,106,230,.17); }
 
 /* 한 쪽에 한 달만 담는 배치 — 날짜 칸이 페이지 전체를 채우므로
    날짜와 일정 요약을 훨씬 크게 보여 준다. */
@@ -1167,7 +1167,7 @@ body.resizing-page-list {
 }
 .goal-data-editable:hover {
   background: rgba(217, 255, 88, .18);
-  box-shadow: 0 0 0 1px rgba(159, 189, 52, .45);
+  box-shadow: 0 0 0 1px rgba(53, 106, 230, .45);
 }
 
 .template-month {
@@ -1556,19 +1556,19 @@ body.resizing-page-list {
   line-height: 1.15;
 }
 .text-element:hover { box-shadow: 0 0 0 1px rgba(120,130,90,.28); }
-.text-element.selected { box-shadow: 0 0 0 2px #9fbd34; background: rgba(239,255,182,.28); }
+.text-element.selected { box-shadow: 0 0 0 2px #356ae6; background: rgba(239,255,182,.28); }
 .text-element.mobile-long-pressing {
-  box-shadow: 0 0 0 3px rgba(159,189,52,.72);
+  box-shadow: 0 0 0 3px rgba(53,106,230,.72);
   background: rgba(239,255,182,.36);
 }
 .text-element.mobile-long-dragging {
   z-index: 8;
-  box-shadow: 0 0 0 3px #9fbd34, 0 12px 30px rgba(38,42,25,.25);
+  box-shadow: 0 0 0 3px #356ae6, 0 12px 30px rgba(38,42,25,.25);
   background: rgba(239,255,182,.5);
 }
 .text-element.creating {
   box-shadow: 0 0 0 1.5px #718d1c;
-  background: rgba(217,255,88,.12);
+  background: rgba(53,106,230,.12);
 }
 .text-resize-handle {
   position: absolute;
@@ -1733,14 +1733,14 @@ body.resizing-page-list {
   padding: 5px 12px;
   border-radius: 7px;
   color: #20201d;
-  background: #e0ff76;
+  background: #356ae6;
   font-family: "Consolas", "SFMono-Regular", monospace;
   font-size: 25px;
   letter-spacing: .14em;
   user-select: all;
 }
 .cloud-device-panel a {
-  color: #3f5e00;
+  color: #214fbd;
   font-size: 13px;
   font-weight: 750;
 }
@@ -1755,7 +1755,7 @@ body.resizing-page-list {
   cursor: pointer;
   font-weight: 700;
 }
-.cloud-choice-button.primary-choice { border-color: #98b52d; background: #d9ff58; }
+.cloud-choice-button.primary-choice { border-color: #2454c7; background: #356ae6; }
 .cloud-cancel-button {
   padding: 8px;
   border: 0;
@@ -1869,8 +1869,8 @@ body.resizing-page-list {
   font-weight: 700;
 }
 .recovery-item-actions button:last-child {
-  border-color: #98b52d;
-  background: #d9ff58;
+  border-color: #2454c7;
+  background: #356ae6;
 }
 
 .goal-hub-dialog,
@@ -1902,7 +1902,7 @@ body.resizing-page-list {
 .goal-hub-empty p { max-width: 460px; margin: 0; font-size: 12px; line-height: 1.6; }
 .goal-hub-empty span { font-size: 11px; }
 .goal-area-card { overflow: hidden; border: 1px solid #d3cecc; border-radius: 12px; background: #fffdfc; }
-.goal-area-header { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 14px 15px; border-bottom: 1px solid #e1dddc; background: #f3f6df; }
+.goal-area-header { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 14px 15px; border-bottom: 1px solid #e1dddc; background: #e7eeff; }
 .goal-area-header > div:first-child { min-width: 0; display: grid; gap: 4px; }
 .goal-area-header strong { font-size: 16px; }
 .goal-area-header span { overflow: hidden; color: #747068; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1915,7 +1915,7 @@ body.resizing-page-list {
 .goal-outcome-card.completed { border-color: #b7ca72; background: #fbfff0; }
 .goal-outcome-main { min-width: 0; }
 .goal-outcome-title { display: flex; gap: 8px; align-items: center; }
-.goal-outcome-title > span { padding: 3px 6px; border-radius: 99px; color: #526400; background: #e8f6b0; font-size: 9px; font-weight: 800; white-space: nowrap; }
+.goal-outcome-title > span { padding: 3px 6px; border-radius: 99px; color: #173a8a; background: #e7eeff; font-size: 9px; font-weight: 800; white-space: nowrap; }
 .goal-outcome-title strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .goal-outcome-main p { margin: 7px 0 9px; color: #666259; font-size: 11px; line-height: 1.5; }
 .goal-outcome-main > small { color: #817d73; font-size: 9px; }
@@ -2007,8 +2007,9 @@ body.resizing-page-list {
   background: #fff;
   font: 14px/1.4 system-ui, sans-serif;
 }
-.calendar-event-row input:focus { border-color: #97b32d; box-shadow: 0 0 0 3px rgba(217,255,88,.42); }
+.calendar-event-row input:focus { border-color: #356ae6; box-shadow: 0 0 0 3px rgba(53,106,230,.42); }
 .calendar-event-row .danger-icon-button { color: #a33a2f; background: #fff; }
+.calendar-event-routine-note { color: #214fbd; font-size: 10px; font-weight: 750; }
 /* 계획 상태(이월·예정·완료) 토글 — 텍스트 요소의 상태 버튼과 같은 모양을 쓴다. */
 .calendar-event-row-status {
   display: grid;
@@ -2027,8 +2028,8 @@ body.resizing-page-list {
   font-weight: 700;
 }
 .calendar-event-row-status button.active {
-  border-color: #9bb433;
-  background: #efffb6;
+  border-color: #356ae6;
+  background: #e7eeff;
   box-shadow: inset 0 0 0 1px rgba(155,180,51,.28);
 }
 .mobile-search-dialog[open] { grid-template-rows: 68px 56px minmax(0, 1fr); }
@@ -2132,8 +2133,8 @@ body.resizing-page-list {
 .mobile-write-field input:focus,
 .mobile-write-field select:focus,
 .mobile-write-field textarea:focus {
-  border-color: #97b32d;
-  box-shadow: 0 0 0 3px rgba(217,255,88,.42);
+  border-color: #356ae6;
+  box-shadow: 0 0 0 3px rgba(53,106,230,.42);
 }
 .mobile-write-target-field,
 .mobile-write-symbol-field {
@@ -2196,14 +2197,14 @@ body.resizing-page-list {
 }
 .mobile-write-targets button.active,
 .mobile-write-symbols button.active {
-  border-color: #9bb433;
-  background: #efffb6;
+  border-color: #356ae6;
+  background: #e7eeff;
   box-shadow: inset 0 0 0 1px rgba(155,180,51,.28);
   font-weight: 700;
 }
 .mobile-write-targets button.active > span {
   color: #364300;
-  background: #d9ff58;
+  background: #356ae6;
 }
 .mobile-page-write-form[data-page-type="future-h1"] .mobile-write-targets,
 .mobile-page-write-form[data-page-type="future-h2"] .mobile-write-targets {
@@ -2243,8 +2244,8 @@ body.resizing-page-list {
   cursor: pointer;
 }
 .mobile-write-mode-switch button.active {
-  border-color: #9bb433;
-  background: #efffb6;
+  border-color: #356ae6;
+  background: #e7eeff;
   box-shadow: inset 0 0 0 1px rgba(155,180,51,.28);
 }
 .mobile-write-routine-fields { display: grid; gap: 12px; }
@@ -2343,8 +2344,8 @@ body.resizing-page-list {
   font-weight: 700;
 }
 .mobile-context-bullet-row button.active {
-  border-color: #9bb433;
-  background: #efffb6;
+  border-color: #356ae6;
+  background: #e7eeff;
   box-shadow: inset 0 0 0 1px rgba(155,180,51,.28);
 }
 .mobile-context-bullet-row button:disabled {
@@ -2402,7 +2403,7 @@ body.resizing-page-list {
   background: #fff;
   font-size: 13px;
 }
-.mobile-search-input:focus { border-color: #99b32e; box-shadow: 0 0 0 3px rgba(217,255,88,.35); }
+.mobile-search-input:focus { border-color: #356ae6; box-shadow: 0 0 0 3px rgba(53,106,230,.35); }
 .mobile-search-input { margin: 9px 14px; }
 .mobile-search-results { padding: 5px 14px 14px; overflow: auto; }
 .mobile-search-result {
@@ -2503,7 +2504,7 @@ body.resizing-page-list {
 }
 .mobile-view-switch button.active {
   color: #25231e;
-  background: #d9ff58;
+  background: #356ae6;
   box-shadow: 0 1px 4px rgba(45,43,36,.12);
 }
 
@@ -2674,7 +2675,7 @@ body.resizing-page-list {
 .mobile-bottom-nav button > span { font-size: 21px; line-height: 23px; }
 .mobile-bottom-nav small { font-size: 10px; font-weight: 650; }
 .mobile-bottom-nav .page-write-nav-button > span {
-  color: #718800;
+  color: #214fbd;
   font-weight: 800;
 }
 
@@ -2930,7 +2931,7 @@ body.resizing-page-list {
 }
 .android-app:not(.mobile-advanced) .text-element.mobile-text-editing {
   z-index: 9;
-  box-shadow: 0 0 0 3px #9fbd34, 0 8px 24px rgba(38,42,25,.18);
+  box-shadow: 0 0 0 3px #356ae6, 0 8px 24px rgba(38,42,25,.18);
   background: rgba(255,255,255,.82);
 }
 .android-app:not(.mobile-advanced) .text-element.mobile-text-editing .text-content {
@@ -3008,7 +3009,7 @@ body.resizing-page-list {
 /* 선택된 줄: 초록 배경을 가득 채우는 대신 왼쪽 띠와 옅은 바탕만 남긴다. */
 .android-app .page-item.current {
   background: #f5fae6;
-  box-shadow: inset 3px 0 0 #a8c52e;
+  box-shadow: inset 3px 0 0 #356ae6;
 }
 .android-app .page-item.active { background: #f7f6f3; }
 
@@ -3079,11 +3080,11 @@ body.resizing-page-list {
 .android-app .page-group-header.group-drop-after::after {
   height: 4px;
   border-radius: 2px;
-  background: #6f8f00;
-  box-shadow: 0 0 0 2px rgba(217,255,88,.5);
+  background: #214fbd;
+  box-shadow: 0 0 0 2px rgba(53,106,230,.5);
 }
 .android-app .page-group-header.group-nest-target {
-  box-shadow: inset 0 0 0 2px #9bb433;
+  box-shadow: inset 0 0 0 2px #356ae6;
 }
 
 .mobile-update-status {
@@ -3113,9 +3114,9 @@ body.resizing-page-list {
   --cream: #f5f4f1;
   --panel: #eceae6;
   --dark: #1d1d1a;
-  --accent: #d3ee58;
-  --accent-strong: #6f850f;
-  --accent-soft: #f1f7d8;
+  --accent: #356ae6;
+  --accent-strong: #214fbd;
+  --accent-soft: #e7eeff;
   --line: #dedbd5;
   --surface: #ffffff;
   --surface-muted: #f8f7f4;
@@ -3123,7 +3124,7 @@ body.resizing-page-list {
   --radius-sm: 8px;
   --radius-md: 11px;
   --radius-lg: 18px;
-  --focus-ring: 0 0 0 3px rgba(165, 192, 47, .24);
+  --focus-ring: 0 0 0 3px rgba(53, 106, 230, .24);
   --shadow: 0 16px 44px rgba(28, 27, 23, .14);
 }
 
@@ -3145,7 +3146,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid #91aa24;
+  outline: 2px solid #2f5fd0;
   outline-offset: 2px;
 }
 
@@ -3178,7 +3179,7 @@ button:disabled {
 .primary-button:hover,
 .cloud-choice-button.primary-choice:hover,
 .recovery-item-actions button:last-child:hover {
-  background: #def56f;
+  background: #285dcc;
 }
 
 .topbar {
@@ -3271,7 +3272,7 @@ button:disabled {
 .page-item.current.multi-selected {
   color: #30351b;
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 #9eb72c;
+  box-shadow: inset 3px 0 0 #356ae6;
 }
 
 .page-group-header {
@@ -3341,7 +3342,7 @@ button:disabled {
 .tool.active {
   color: #3e4b08;
   background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px #d7e89b;
+  box-shadow: inset 0 0 0 1px #b7c8f4;
 }
 
 .tool-divider,
@@ -3471,9 +3472,9 @@ button:disabled {
 .mobile-write-mode-switch button.active,
 .calendar-event-row-status button.active {
   color: #3e4b08;
-  border-color: #afc53f;
+  border-color: #6f91e8;
   background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px rgba(145,170,36,.18);
+  box-shadow: inset 0 0 0 1px rgba(53,106,230,.18);
 }
 
 .mobile-write-submit {
@@ -3501,7 +3502,7 @@ button:disabled {
   margin: 3px 6px;
   color: #252a15;
   background: var(--accent);
-  box-shadow: 0 5px 14px rgba(104,125,14,.2);
+  box-shadow: 0 5px 14px rgba(33,79,189,.2);
 }
 
 .android-app .mobile-bottom-nav .page-write-nav-button > span {
@@ -3515,7 +3516,7 @@ button:disabled {
 .android-app .page-item.current {
   color: #30351b;
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 #9eb72c;
+  box-shadow: inset 3px 0 0 #356ae6;
 }
 
 .android-app .mobile-more-actions {
@@ -3581,4 +3582,269 @@ button:disabled {
   .toolstrip::-webkit-scrollbar {
     display: none;
   }
+}
+/* High-visibility color system (0.40.1) */
+:root {
+  --ink: #172033;
+  --muted: #526078;
+  --paper: #ffffff;
+  --cream: #edf2f8;
+  --panel: #dfe6f0;
+  --dark: #16243f;
+  --accent: #356ae6;
+  --accent-strong: #214fbd;
+  --accent-soft: #e7eeff;
+  --line: #c7d1df;
+  --surface: #ffffff;
+  --surface-muted: #f3f6fa;
+  --danger: #b42318;
+  --focus-ring: 0 0 0 3px rgba(53, 106, 230, .24);
+  --shadow: 0 16px 44px rgba(23, 32, 51, .16);
+}
+
+body {
+  color: var(--ink);
+  background: var(--cream);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline-color: #2f5fd0;
+}
+
+.primary-button,
+.cloud-choice-button.primary-choice,
+.recovery-item-actions button:last-child {
+  color: #ffffff;
+  border-color: #2454c7;
+  background: var(--accent);
+}
+
+.primary-button:hover,
+.cloud-choice-button.primary-choice:hover,
+.recovery-item-actions button:last-child:hover {
+  background: #285dcc;
+}
+
+.topbar {
+  background: var(--dark);
+  box-shadow: 0 4px 18px rgba(16, 28, 51, .2);
+}
+
+.quiet-button {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.quiet-button:hover,
+.sheet-header .icon-button:hover {
+  background: #e9eef6;
+}
+
+.topbar .quiet-button {
+  color: #f8fafc;
+  border-color: rgba(255,255,255,.16);
+  background: rgba(255,255,255,.1);
+}
+
+.topbar .quiet-button:hover,
+.topbar .icon-button:hover {
+  background: rgba(255,255,255,.18);
+}
+
+.view-switch button.active,
+.cloud-button[data-state="synced"] {
+  color: #ffffff;
+  border-color: #4779e8;
+  background: var(--accent);
+}
+
+.sidebar,
+.statusbar {
+  border-color: var(--line);
+  background: #f8fafc;
+}
+
+.eyebrow,
+.statusbar {
+  color: #64748b;
+}
+
+.page-item:hover,
+.page-item.active {
+  background: #e9eef6;
+}
+
+.page-item.current,
+.page-item.current.multi-selected,
+.android-app .page-item.current {
+  color: #173a8a;
+  background: var(--accent-soft);
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.page-group-header {
+  color: #27364f;
+  background: #e5ebf3;
+}
+
+.template-grid button,
+.full-button,
+.page-group-control select {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.template-grid button:hover,
+.full-button:hover {
+  border-color: #9aabc2;
+  background: #f8fafc;
+}
+
+.template-grid button span {
+  color: #244da8;
+  background: var(--accent-soft);
+}
+
+.toolstrip {
+  border-color: var(--line);
+  background: rgba(255,255,255,.97);
+}
+
+.tool:hover,
+.bullet-palette button:hover {
+  background: #e9eef6;
+}
+
+.tool.active {
+  color: #173a8a;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px #b7c8f4;
+}
+
+.font-size-control input:focus,
+.mobile-write-field input:focus,
+.mobile-write-field select:focus,
+.mobile-write-field textarea:focus,
+.mobile-search-input:focus,
+.calendar-event-row input:focus {
+  border-color: var(--accent);
+}
+
+.book-viewport {
+  background: #e5ebf3;
+}
+
+.page-nav {
+  color: #334155;
+  border-color: #bcc8d8;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 6px 18px rgba(23,32,51,.14);
+}
+
+.page-nav:hover {
+  color: #173a8a;
+  background: #ffffff;
+}
+
+.welcome-dialog,
+.cloud-connect-dialog,
+.group-edit-dialog,
+.recovery-dialog,
+.goal-hub-dialog,
+.goal-editor-dialog,
+.calendar-event-dialog,
+.mobile-search-dialog,
+.mobile-more-dialog,
+.mobile-page-write-dialog,
+.mobile-text-context-dialog {
+  color: var(--ink);
+  background: #f8fafc;
+}
+
+.sheet-header {
+  color: var(--ink);
+  border-color: var(--line);
+  background: #ffffff;
+}
+
+.mobile-write-field input,
+.mobile-write-field select,
+.mobile-write-field textarea,
+.mobile-search-input,
+.calendar-event-row input {
+  color: var(--ink);
+  border-color: #aebbcf;
+  background: #ffffff;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #7a879a;
+  opacity: 1;
+}
+
+.mobile-write-target-field,
+.mobile-write-symbol-field,
+.mobile-context-bullet-field,
+.goal-area-card,
+.goal-outcome-card,
+.recovery-item,
+.mobile-view-setting,
+.mobile-more-actions {
+  color: var(--ink);
+  border-color: var(--line);
+  background: #ffffff;
+}
+
+.mobile-write-targets button.active,
+.mobile-write-symbols button.active,
+.mobile-write-mode-switch button.active,
+.calendar-event-row-status button.active {
+  color: #173a8a;
+  border-color: #6f91e8;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(53,106,230,.18);
+}
+
+.mobile-bottom-nav {
+  border-color: #b9c5d6;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 -8px 28px rgba(23,32,51,.14);
+}
+
+.mobile-bottom-nav button {
+  color: #46556d;
+}
+
+.mobile-bottom-nav button:active {
+  background: #e7edff;
+}
+
+.android-app .mobile-bottom-nav .page-write-nav-button {
+  color: #ffffff;
+  background: var(--accent);
+  box-shadow: 0 5px 16px rgba(33,79,189,.3);
+}
+
+.mobile-view-switch button.active,
+.mobile-write-targets button.active > span,
+.cloud-device-panel strong {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.journal-page {
+  color: var(--ink);
+  background-color: #ffffff;
+}
+
+/* 노트 종이처럼 보이는 장식용 가로줄은 숨기고, 달력 칸·세로 구획은 유지한다. */
+.page-template .template-line {
+  display: none !important;
 }

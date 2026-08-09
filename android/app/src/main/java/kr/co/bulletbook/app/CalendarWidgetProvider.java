@@ -300,7 +300,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         } else {
             cell.setTextColor(
                 R.id.widget_cell_day,
-                Color.parseColor(isCurrentMonth ? "#20201d" : "#9c978d")
+                Color.parseColor(isCurrentMonth ? "#172033" : "#94a3b8")
             );
             cell.setInt(R.id.widget_cell_day, "setBackgroundResource", 0);
         }
@@ -313,7 +313,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
             cell.setTextViewText(R.id.widget_cell_dots, summary);
             cell.setTextColor(
                 R.id.widget_cell_dots,
-                Color.parseColor(isCurrentMonth ? "#504b43" : "#a39d92")
+                Color.parseColor(isCurrentMonth ? "#475569" : "#a7b2c2")
             );
         }
         return cell;

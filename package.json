@@ -1,11 +1,12 @@
 {
   "name": "bulletbook",
-  "version": "0.40.0",
+  "version": "0.40.1",
   "private": true,
   "description": "편집 가능한 불렛저널 - Windows와 Android 공통 앱",
   "scripts": {
     "build:web": "node scripts/build-web.mjs",
     "test:sync": "node scripts/test-cloud-merge.mjs",
+    "test:routines": "node scripts/test-routine-dedupe.mjs",
     "test:windows-host": "node scripts/test-windows-host.mjs",
     "android:sync": "npm run build:web && npx cap sync android && node scripts/vendor-capacitor.mjs",
     "android:open": "npx cap open android",

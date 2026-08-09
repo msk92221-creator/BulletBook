@@ -7,5 +7,5 @@
     android:gravity="center"
     android:includeFontPadding="false"
     android:paddingBottom="3dp"
-    android:textColor="#8a8478"
+    android:textColor="#64748b"
     android:textSize="10sp" />

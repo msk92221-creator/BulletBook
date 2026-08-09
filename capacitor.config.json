@@ -4,6 +4,6 @@
   "webDir": "dist",
   "android": {
     "allowMixedContent": false,
-    "backgroundColor": "#f3f0e7"
+    "backgroundColor": "#e5ebf3"
   }
 }

@@ -16,7 +16,7 @@
         android:minWidth="18dp"
         android:gravity="center"
         android:includeFontPadding="false"
-        android:textColor="#20201d"
+        android:textColor="#172033"
         android:textSize="11sp"
         android:textStyle="normal"
         android:text="" />
@@ -26,7 +26,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:textColor="#504b43"
+        android:textColor="#475569"
         android:textSize="8sp"
         android:gravity="start|top"
         android:includeFontPadding="false"
