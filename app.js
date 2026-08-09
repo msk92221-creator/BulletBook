@@ -9036,8 +9036,9 @@
       activePageId = daily.page.id;
       selection = null;
       renderAll();
-      // 위젯 날짜 문맥(mobileWriteDateContext)을 유지하기 위해 쓰기 다이얼로그를 띄운다.
-      openMobilePageWrite({ date: isoDate(date) });
+      // 쓰기 다이얼로그를 띄우면 일간 페이지를 덮고 키보드까지 올라와
+      // 해당 날짜 페이지가 보이지 않으므로 열지 않고 토스트로만 안내한다.
+      showToast(`${dailyDateLabel(date)} 일간 페이지를 열었습니다.`);
       return true;
     };
     window.__bulletBookOpenWidgetMonth = value => {
