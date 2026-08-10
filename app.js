@@ -827,10 +827,10 @@
   function isAutomaticWeeklyTitle(page, value) {
     const title = String(value || "").trim();
     if (!title) return true;
-    if (title === "주간 계획 · 월–목" || title === "주간 계획 · 금–일") return true;
+    if (/^주간 계획 · (?:월–목|금–일)(?: · 계속 \d+)?$/u.test(title)) return true;
     const range = page?.type === "weekly-right" ? "금-일" : "월-목";
     return new RegExp(
-      `^\\s*\\d+(?:\\.\\d+)?\\s*주차\\s*주간\\s*계획\\s*\\(${range}\\)\\s*$`,
+      `^\\s*\\d+(?:\\.\\d+)?\\s*주차\\s*주간\\s*계획\\s*\\(${range}\\)(?:\\s*·\\s*계속\\s*\\d+)?\\s*$`,
       "u"
     ).test(title);
   }
@@ -883,6 +883,16 @@
       : "기본 페이지 제목으로 복원했습니다");
   }
 
+  function continuationPageNumber(page) {
+    const index = Math.round(Number(page?.continuationIndex) || 0);
+    return index > 0 ? index + 1 : 0;
+  }
+
+  function continuedPageLabel(page, label) {
+    const number = continuationPageNumber(page);
+    return number ? `${label} · 계속 ${number}` : label;
+  }
+
   function pageDisplayTitle(page, fallback = "페이지", groups = book.groups) {
     const title = page?.title?.trim();
     if (page?.titleCustomized === true && title) return title;
@@ -890,14 +900,16 @@
       const date = dateFromIso(page.pageDate);
       const automaticTitle = !title || title === templateNames.daily ||
         /^\d{1,2}\s*월\s*\d{1,2}\s*일(?:\s*\([일월화수목금토]\))?$/u.test(title);
-      if (automaticTitle && !Number.isNaN(date.getTime())) return dailyDateLabel(date);
+      if (automaticTitle && !Number.isNaN(date.getTime())) {
+        return continuedPageLabel(page, dailyDateLabel(date));
+      }
     }
     if (title) return title;
     if (page?.type === "monthly") {
       const { month } = monthlyDateContext(page, groups);
       if (month) return `${month}월 월간 계획`;
     }
-    return templateNames[page?.type] || fallback;
+    return continuedPageLabel(page, templateNames[page?.type] || fallback);
   }
 
   function groupDescendantIdSet(groupId, groups = book.groups) {
@@ -1579,7 +1591,7 @@
   // 주간·연간에서 만든 것, 또는 일정 편집창에서 새로 추가한 것)은 '할 일'
   // 칸의 기본값으로 묶는다.
   function dailyColumnCalendarEvents(page, columnId) {
-    if (page?.type !== "daily") return [];
+    if (page?.type !== "daily" || page.continuationOf) return [];
     const date = normalizedDateOrBlank(page.pageDate);
     if (!date) return [];
     return calendarEventsForDate(date).filter(event =>
@@ -1639,6 +1651,7 @@
 
   // 주간 페이지는 칸마다 날짜가 다르므로 날짜로만 나누면 된다.
   function weeklyColumnEventRects(page, offset) {
+    if (page?.continuationOf) return [];
     const weekStart = normalizedWeekStart(page?.weekStart);
     if (!weekStart) return [];
     const date = isoDate(offsetDate(dateFromIso(weekStart), offset));
@@ -2084,13 +2097,12 @@
 
   function weeklyPageTitle(page, value = page?.weekNumber) {
     const number = normalizedWeekNumber(value);
-    if (number) {
-      const range = page?.type === "weekly-right" ? "금-일" : "월-목";
-      return `${number}주차 주간 계획 (${range})`;
-    }
-    return page?.type === "weekly-right"
-      ? "주간 계획 · 금–일"
-      : "주간 계획 · 월–목";
+    const title = number
+      ? `${number}주차 주간 계획 (${page?.type === "weekly-right" ? "금-일" : "월-목"})`
+      : page?.type === "weekly-right"
+        ? "주간 계획 · 금–일"
+        : "주간 계획 · 월–목";
+    return continuedPageLabel(page, title);
   }
 
   function normalizedWeekStart(value) {
@@ -2109,9 +2121,21 @@
     return pair.length ? pair : [page];
   }
 
+  function weeklyDateLinkedPages(page) {
+    const root = page?.continuationOf
+      ? book.pages.find(candidate => candidate.id === page.continuationOf) || page
+      : page;
+    const pair = weeklyPairPages(root);
+    const rootIds = new Set(pair.map(candidate => candidate.id));
+    return [...new Map([
+      ...pair,
+      ...book.pages.filter(candidate => rootIds.has(candidate.continuationOf)),
+    ].map(candidate => [candidate.id, candidate])).values()];
+  }
+
   function setWeeklyNumberForPair(page, value) {
     const number = normalizedWeekNumber(value);
-    weeklyPairPages(page).forEach(candidate => {
+    weeklyDateLinkedPages(page).forEach(candidate => {
       candidate.weekNumber = number;
       if (candidate.titleCustomized !== true) {
         candidate.title = weeklyPageTitle(candidate, number);
@@ -2123,7 +2147,7 @@
 
   function setWeeklyStartForPair(page, value) {
     const weekStart = normalizedWeekStart(value);
-    weeklyPairPages(page).forEach(candidate => {
+    weeklyDateLinkedPages(page).forEach(candidate => {
       candidate.weekStart = weekStart;
       candidate.templateText ||= {};
       // 시작 날짜를 바꾸면 손으로 고친 요일 표시는 새 날짜로 되돌린다.
@@ -2369,7 +2393,9 @@
 
   function ensureDailyPage(date) {
     const pageDate = isoDate(date);
-    let index = book.pages.findIndex(page => page.type === "daily" && page.pageDate === pageDate);
+    let index = book.pages.findIndex(page =>
+      page.type === "daily" && page.pageDate === pageDate && !page.continuationOf
+    );
     if (index >= 0) return { page: book.pages[index], index, created: false };
     ensureWeeklyPagePair(date);
     const group = weekGroupForDate(date);
@@ -2428,7 +2454,7 @@
     const weekStart = normalizedWeekStart(weekStartValue);
     if (!weekStart) return { due: 0, added: 0, skipped: 0 };
     const anchor = book.pages.find(page =>
-      isWeeklyPage(page) && normalizedWeekStart(page.weekStart) === weekStart
+      isWeeklyPage(page) && !page.continuationOf && normalizedWeekStart(page.weekStart) === weekStart
     );
     if (!anchor) return { due: 0, added: 0, skipped: 0 };
     const pages = weeklyPairPages(anchor);
@@ -2489,7 +2515,7 @@
       isoDate(new Date(today.getFullYear(), 11, 31));
     let added = 0;
     book.pages.forEach(page => {
-      if (page.type !== "daily") return;
+      if (page.type !== "daily" || page.continuationOf) return;
       const pageDate = normalizedDateOrBlank(page.pageDate);
       if (!pageDate || !isDateInRange(pageDate, todayValue, horizonEnd)) return;
       added += receiveMissionsForDate(dateFromIso(pageDate), page).added;
@@ -4899,6 +4925,7 @@
   function dailyTemplate(title, page) {
     const date = page.pageDate ? dateFromIso(page.pageDate) : null;
     const dateLabel = date ? dailyDateLabel(date) : " 월 일";
+    const displayDateLabel = continuedPageLabel(page, dateLabel);
     const dateValue = date ? isoDate(date) : "";
     const ruledLines = Array.from({ length: 21 }, (_, index) => {
       const y = 236 + index * 42;
@@ -4914,8 +4941,8 @@
         .join("")
       : "";
     return fixedDateTitleBlock(
-      escapeHtml(dateLabel),
-      date ? `DAILY PLAN · ${dateLabel}` : "DAILY PLAN · 날짜를 선택하세요",
+      escapeHtml(displayDateLabel),
+      date ? `DAILY PLAN · ${displayDateLabel}` : "DAILY PLAN · 날짜를 선택하세요",
       "daily",
       "일간 계획 날짜 변경"
     ) + `
@@ -6163,6 +6190,94 @@
     return null;
   }
 
+  function reflowMobileWriteTarget(page, target) {
+    const moving = (page.elements || []).filter(element =>
+      element.type === "text" && element.gridLocked && element.layoutTarget === target.id
+    );
+    if (!moving.length) return true;
+    const movingIds = new Set(moving.map(element => element.id));
+    const virtualPage = {
+      ...page,
+      elements: (page.elements || []).filter(element => !movingIds.has(element.id)),
+    };
+    const placements = [];
+    for (const element of moving) {
+      const slot = nextMobileWriteSlot(virtualPage, target, String(element.text || ""));
+      if (!slot) return false;
+      placements.push({ element, slot });
+      virtualPage.elements.push({ ...element, ...slot });
+    }
+    placements.forEach(({ element, slot }) => Object.assign(element, slot));
+    return true;
+  }
+
+  function mobileWriteContinuationChain(page) {
+    const rootId = page?.continuationOf || page?.id;
+    if (!rootId) return page ? [page] : [];
+    return book.pages
+      .filter(candidate => candidate.id === rootId || candidate.continuationOf === rootId)
+      .sort((left, right) => book.pages.indexOf(left) - book.pages.indexOf(right));
+  }
+
+  function createMobileWriteContinuationPage(sourcePage) {
+    if (!sourcePage || (sourcePage.type !== "daily" && !isWeeklyPage(sourcePage))) return null;
+    const chain = mobileWriteContinuationChain(sourcePage);
+    const rootId = sourcePage.continuationOf || sourcePage.id;
+    const templatePage = chain.find(candidate => candidate.id === rootId) || sourcePage;
+    const nextIndex = Math.max(0, ...chain.map(candidate =>
+      Math.round(Number(candidate.continuationIndex) || 0)
+    )) + 1;
+    const metadata = clone(templatePage);
+    [
+      "id", "elements", "createdAt", "updatedAt", "title", "titleCustomized",
+      "continuationOf", "continuationIndex", "weeklyPairId",
+    ].forEach(key => delete metadata[key]);
+    const templateText = clone(templatePage.templateText || {});
+    delete templateText[pageTitleTemplateField(templatePage)];
+    const continuation = makePage(templatePage.type, "", {
+      ...metadata,
+      templateText,
+      continuationOf: rootId,
+      continuationIndex: nextIndex,
+      weeklyPairId: isWeeklyPage(templatePage) ? uid() : undefined,
+    });
+    if (isWeeklyPage(continuation)) continuation.title = weeklyPageTitle(continuation);
+    const insertionPeers = isWeeklyPage(templatePage)
+      ? weeklyDateLinkedPages(templatePage)
+      : chain;
+    const lastIndex = Math.max(...insertionPeers.map(candidate => book.pages.indexOf(candidate)));
+    book.pages.splice(lastIndex + 1, 0, continuation);
+    return continuation;
+  }
+
+  function mobileWriteDestination(sourcePage, sourceTarget, text) {
+    if (!sourcePage || !sourceTarget) return null;
+    const supportsContinuation = sourcePage.type === "daily" || isWeeklyPage(sourcePage);
+    const candidates = supportsContinuation
+      ? mobileWriteContinuationChain(sourcePage)
+      : [sourcePage];
+    for (const candidatePage of candidates) {
+      const candidateTarget = mobileWriteTargetsForPage(candidatePage)
+        .find(target => target.id === sourceTarget.id);
+      if (!candidateTarget || !reflowMobileWriteTarget(candidatePage, candidateTarget)) continue;
+      const slot = nextMobileWriteSlot(candidatePage, candidateTarget, text);
+      if (slot) return { page: candidatePage, target: candidateTarget, slot, created: false };
+    }
+    if (!supportsContinuation) return null;
+    const continuation = createMobileWriteContinuationPage(sourcePage);
+    const target = continuation
+      ? mobileWriteTargetsForPage(continuation).find(item => item.id === sourceTarget.id)
+      : null;
+    const slot = continuation && target ? nextMobileWriteSlot(continuation, target, text) : null;
+    if (!continuation || !target || !slot) {
+      if (continuation) {
+        book.pages = book.pages.filter(candidate => candidate.id !== continuation.id);
+      }
+      return null;
+    }
+    return { page: continuation, target, slot, created: true };
+  }
+
   function appendMonthlyScheduleOnSameDay(page, target, text) {
     if (target.id !== "monthly-schedule") return null;
     // nextMobileWriteSlot과 같은 좌표를 써야 같은 날짜 줄을 찾아낸다.
@@ -6256,30 +6371,38 @@
       showToast(`"${target.label}"에 일정을 이어서 추가했습니다`);
       return;
     }
-    const slot = nextMobileWriteSlot(page, target, text);
-    if (!slot) {
+    const destination = mobileWriteDestination(page, target, text);
+    if (!destination) {
       refs.mobilePageWriteHint.textContent =
         target.id === "monthly-schedule"
           ? "해당 날짜 줄에 기록을 추가하지 못했습니다. 페이지를 다시 연 뒤 시도해 주세요."
-          : "이 칸에 남은 빈 줄이 없습니다. 다른 칸을 선택하거나 Windows에서 정리해 주세요.";
+          : "이 내용이 한 칸에 들어가지 않습니다. 내용을 나눠 입력해 주세요.";
       return;
     }
+    const destinationPage = destination.page;
+    const destinationTarget = destination.target;
+    const slot = destination.slot;
     const element = makeText(slot.x, slot.y, text, {
       width: slot.width,
       height: slot.height,
-      fontSize: target.fontSize,
-      color: target.color,
+      fontSize: destinationTarget.fontSize,
+      color: destinationTarget.color,
       gridLocked: true,
-      layoutTarget: target.id,
+      layoutTarget: destinationTarget.id,
     });
-    page.elements.push(element);
-    currentIndex = book.pages.findIndex(item => item.id === page.id);
-    activePageId = page.id;
+    destinationPage.elements.push(element);
+    currentIndex = book.pages.findIndex(item => item.id === destinationPage.id);
+    activePageId = destinationPage.id;
     selection = null;
     commitHistory();
     refs.mobilePageWriteDialog.close();
     renderAll();
-    showToast(`"${target.label}"의 다음 빈 줄에 기록했습니다`);
+    const continued = destinationPage.id !== page.id;
+    showToast(destination.created
+      ? `같은 날짜 양식의 다음 장을 만들고 "${destinationTarget.label}"에 기록했습니다`
+      : continued
+        ? `다음 계속 페이지의 "${destinationTarget.label}"에 기록했습니다`
+        : `"${destinationTarget.label}"의 다음 빈 줄에 기록했습니다`);
   }
 
   function saveMobileRoutineFromWrite(title) {
@@ -7302,7 +7425,7 @@
     const weekStart = isoDate(monday);
     ensureMonthlyPage(monday.getFullYear(), monday.getMonth() + 1);
     const existing = book.pages.find(page =>
-      isWeeklyPage(page) && normalizedWeekStart(page.weekStart) === weekStart
+      isWeeklyPage(page) && !page.continuationOf && normalizedWeekStart(page.weekStart) === weekStart
     );
     if (existing) return { pages: weeklyPairPages(existing), created: false };
     const group = weekGroupForDate(monday);
