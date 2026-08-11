@@ -267,6 +267,9 @@
     pageStatus: $("#pageStatus"),
     viewStatus: $("#viewStatus"),
     sidebar: $("#sidebar"),
+    selectedPageActions: $("#selectedPageActions"),
+    selectedPageCount: $("#selectedPageCount"),
+    moveSelectedPagesBelowCoverButton: $("#moveSelectedPagesBelowCover"),
     sidebarListResizer: $("#sidebarListResizer"),
     sidebarTools: $("#sidebarTools"),
     sidebarScrim: $("#sidebarScrim"),
@@ -3005,7 +3008,7 @@
       .forEach(group => appendMissingTree(group, groupPathForId(group.id).length - 1));
     const topDropZone = document.createElement("div");
     topDropZone.className = "page-list-top-drop-zone";
-    topDropZone.textContent = "여기에 놓으면 맨 위로 이동";
+    topDropZone.textContent = "여기에 놓으면 표지 바로 아래로 이동";
     topDropZone.addEventListener("dragover", event => {
       if (!pageListDragState) return;
       event.preventDefault();
@@ -3382,7 +3385,7 @@
     return reorderPagesFromList([sourceId], targetId, after);
   }
 
-  function movePagesToBookStart(sourceIds) {
+  function movePagesToBookStart(sourceIds, clearSelection = false) {
     const orderedIds = orderedMovablePageIds(sourceIds);
     const sourceSet = new Set(orderedIds);
     if (!orderedIds.length) return false;
@@ -3399,11 +3402,12 @@
     if (afterState === beforeState) return false;
     currentIndex = Math.max(0, book.pages.findIndex(page => page.id === activePageId));
     selection = null;
+    if (clearSelection) orderedIds.forEach(pageId => selectedPageIds.delete(pageId));
     commitHistory();
     renderAll();
     showToast(orderedIds.length > 1
-      ? `${orderedIds.length}개 페이지를 맨 위로 이동했습니다`
-      : "페이지를 맨 위로 이동했습니다");
+      ? `${orderedIds.length}개 페이지를 표지 바로 아래로 이동했습니다`
+      : "페이지를 표지 바로 아래로 이동했습니다");
     return true;
   }
 
@@ -8038,6 +8042,11 @@
   function updateSelectedPageActions() {
     const count = checkedPagesInBookOrder().length;
     if (!refs.duplicatePageButton || !refs.deletePageButton) return;
+    if (refs.selectedPageActions) refs.selectedPageActions.hidden = count === 0;
+    if (refs.selectedPageCount) refs.selectedPageCount.textContent = String(count);
+    if (refs.moveSelectedPagesBelowCoverButton) {
+      refs.moveSelectedPagesBelowCoverButton.disabled = count === 0;
+    }
     refs.duplicatePageButton.disabled = count === 0;
     refs.deletePageButton.disabled = count === 0;
     refs.duplicatePageButton.textContent = count
@@ -8048,7 +8057,17 @@
       : "선택한 페이지 삭제";
   }
 
+  function moveCheckedPagesBelowCover() {
+    const sources = checkedPagesInBookOrder();
+    if (!sources.length) {
+      showToast("표지 아래로 옮길 페이지를 먼저 체크해 주세요");
+      return;
+    }
+    movePagesToBookStart(sources.map(page => page.id), true);
+  }
+
   function duplicateCheckedPages() {
+
     const sources = checkedPagesInBookOrder();
     if (!sources.length) {
       showToast("복제할 페이지를 먼저 체크해 주세요");
@@ -9086,6 +9105,7 @@
     refs.duplicatePageButton.addEventListener("click", duplicateCheckedPages);
     refs.deletePageButton.addEventListener("click", deleteCheckedPages);
     refs.addGroupButton.addEventListener("click", addPageGroup);
+    refs.moveSelectedPagesBelowCoverButton.addEventListener("click", moveCheckedPagesBelowCover);
     refs.groupEditCloseButton.addEventListener("click", closePageGroupEditor);
     refs.groupEditForm.addEventListener("submit", event => {
       event.preventDefault();
