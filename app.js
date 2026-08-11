@@ -1298,6 +1298,183 @@
     }
     return removedIds;
   }
+  function canonicalCalendarGroup(value, canonicalId, matches, properties) {
+    const candidates = value.groups.filter(group => group.id === canonicalId || matches(group));
+    let keeper = candidates.find(group => group.id === canonicalId) || candidates[0];
+    if (!keeper) {
+      keeper = {
+        id: canonicalId,
+        createdAt: value.createdAt || "1970-01-01T00:00:00.000Z",
+      };
+      value.groups.push(keeper);
+    } else if (keeper.id !== canonicalId) {
+      const previousId = keeper.id;
+      keeper.id = canonicalId;
+      value.pages.forEach(page => {
+        if (page.groupId === previousId) page.groupId = canonicalId;
+      });
+      value.groups.forEach(group => {
+        if (group.parentId === previousId) group.parentId = canonicalId;
+      });
+    }
+    const aliasIds = new Set(candidates
+      .filter(group => group !== keeper)
+      .map(group => group.id));
+    if (aliasIds.size) {
+      value.pages.forEach(page => {
+        if (aliasIds.has(page.groupId)) page.groupId = canonicalId;
+      });
+      value.groups.forEach(group => {
+        if (aliasIds.has(group.parentId)) group.parentId = canonicalId;
+      });
+      value.groups = value.groups.filter(group => !aliasIds.has(group.id));
+    }
+    Object.assign(keeper, properties, { id: canonicalId });
+    return keeper;
+  }
+
+  // 0.40.6까지는 동기화·옛 문서 병합 뒤 주차 그룹의 상위 월 그룹이 사라지면
+  // `1주차`, `2주차` 같은 그룹들이 최상위 목록 맨 아래에 여러 벌 남았다.
+  // 페이지의 날짜 메타데이터를 기준으로 연→월→주 계층을 결정적으로 복구하고,
+  // 동일 주차 그룹은 하나로 합친다. 페이지와 기록 자체는 삭제하지 않는다.
+  function repairLegacyCalendarGroupHierarchy(value) {
+    const before = JSON.stringify({
+      version: value.calendarGroupHierarchyVersion || 0,
+      groups: value.groups,
+      pages: value.pages.map(page => [page.id, page.groupId || null]),
+    });
+    const yearGroup = yearValue => {
+      const year = clamp(Math.round(Number(yearValue) || 0), 1900, 2200);
+      return canonicalCalendarGroup(
+        value,
+        `calendar-year-${year}`,
+        group => (group.kind === "year" && Number(group.year) === year) ||
+          (!group.parentId && String(group.name || "").trim() === `${year}년`),
+        { name: `${year}년`, kind: "year", parentId: null, year }
+      );
+    };
+    const monthGroup = (yearValue, monthValue) => {
+      const year = clamp(Math.round(Number(yearValue) || 0), 1900, 2200);
+      const month = clamp(Math.round(Number(monthValue) || 0), 1, 12);
+      const parent = yearGroup(year);
+      return canonicalCalendarGroup(
+        value,
+        `calendar-month-${year}-${String(month).padStart(2, "0")}`,
+        group => (group.kind === "month" && Number(group.year) === year &&
+          Number(group.month) === month) ||
+          (!group.parentId && String(group.name || "").trim() === `${year}년 ${month}월`),
+        { name: `${month}월`, kind: "month", parentId: parent.id, year, month }
+      );
+    };
+    const weekGroup = weekStartValue => {
+      const normalized = normalizedDateOrBlank(weekStartValue);
+      if (!normalized) return null;
+      const monday = mondayOf(dateFromIso(normalized));
+      const weekStart = isoDate(monday);
+      const year = monday.getFullYear();
+      const month = monday.getMonth() + 1;
+      const number = weekNumberForMonday(monday);
+      const parent = monthGroup(year, month);
+      return canonicalCalendarGroup(
+        value,
+        `calendar-week-${weekStart}`,
+        group => group.kind === "week" &&
+          normalizedDateOrBlank(group.weekStart) === weekStart,
+        {
+          name: `${number}주차`, kind: "week", parentId: parent.id,
+          year, month, weekStart, weekNumber: number,
+        }
+      );
+    };
+
+    [...value.groups].forEach(group => {
+      if (group.kind === "month" && Number.isInteger(Number(group.year)) &&
+          Number.isInteger(Number(group.month))) {
+        monthGroup(Number(group.year), Number(group.month));
+      }
+    });
+    [...value.groups].forEach(group => {
+      if (group.kind === "week" && normalizedDateOrBlank(group.weekStart)) {
+        weekGroup(group.weekStart);
+      }
+    });
+
+    value.pages.forEach(page => {
+      if (isYearCalendarTemplate(page.planTemplate) && Number.isInteger(Number(page.year))) {
+        page.groupId = yearGroup(Number(page.year)).id;
+        return;
+      }
+      if (page.type === "monthly") {
+        const context = monthlyDateContext(page, value.groups);
+        if (context.hasCalendarDate) {
+          page.year = context.year;
+          page.month = context.month;
+          page.groupId = monthGroup(context.year, context.month).id;
+        }
+        return;
+      }
+      if (page.type === "daily" && normalizedDateOrBlank(page.pageDate)) {
+        page.groupId = weekGroup(page.pageDate)?.id || page.groupId;
+        return;
+      }
+      if (isWeeklyPage(page) && normalizedDateOrBlank(page.weekStart)) {
+        const group = weekGroup(page.weekStart);
+        if (group) {
+          page.weekStart = group.weekStart;
+          page.weekNumber = String(group.weekNumber);
+          page.groupId = group.id;
+        }
+      }
+    });
+
+    pruneEmptyPageGroups(value);
+    if ((Number(value.calendarGroupHierarchyVersion) || 0) < 1) {
+      const originalOrder = new Map(value.pages.map((page, index) => [page.id, index]));
+      const calendarRank = page => {
+        const path = groupPathForId(page.groupId, value.groups);
+        const year = path.map(group => Number(group.year)).find(Number.isInteger) ||
+          Number(page.year) || 0;
+        const month = path.map(group => Number(group.month)).find(Number.isInteger) ||
+          Number(page.month) || 0;
+        const weekStart = path.map(group => normalizedDateOrBlank(group.weekStart)).find(Boolean) ||
+          normalizedDateOrBlank(page.weekStart || page.pageDate) || "";
+        return [year, month, path.length, weekStart, originalOrder.get(page.id) || 0];
+      };
+      const calendarPages = [];
+      const otherPages = [];
+      const cover = value.pages[0]?.type === "cover" ? value.pages[0] : null;
+      value.pages.forEach(page => {
+        if (page === cover) return;
+        const inCalendarTree = groupPathForId(page.groupId, value.groups)
+          .some(group => ["year", "month", "week"].includes(group.kind));
+        (inCalendarTree ? calendarPages : otherPages).push(page);
+      });
+      calendarPages.sort((left, right) => {
+        const leftRank = calendarRank(left);
+        const rightRank = calendarRank(right);
+        return leftRank[0] - rightRank[0] || leftRank[1] - rightRank[1] ||
+          leftRank[2] - rightRank[2] || String(leftRank[3]).localeCompare(rightRank[3]) ||
+          leftRank[4] - rightRank[4];
+      });
+      value.pages = [cover, ...calendarPages, ...otherPages].filter(Boolean);
+      value.calendarGroupHierarchyVersion = 1;
+    }
+    value.pages = normalizeGroupPageOrder(value.pages, value.groups);
+
+    const after = JSON.stringify({
+      version: value.calendarGroupHierarchyVersion || 0,
+      groups: value.groups,
+      pages: value.pages.map(page => [page.id, page.groupId || null]),
+    });
+    const changed = before !== after;
+    if (changed) {
+      Object.defineProperty(value, "__calendarGroupsRepaired", {
+        value: true, configurable: true, enumerable: false,
+      });
+    }
+    return changed;
+  }
+
 
   function normalizeBook(value) {
     if (!value || typeof value !== "object") value = createDefaultBook();
@@ -1367,6 +1544,7 @@
       migrateTemplateTextKeys(page, value.groups);
     });
     migrateYearCalendarPages(value);
+    repairLegacyCalendarGroupHierarchy(value);
     migrateLegacyCircleTextToEvents(value);
     dedupeDuplicatedMissions(value);
     // 이미 pair id가 있는 주간 양면은 페이지 순서를 재배치하기 전에 먼저
@@ -3038,9 +3216,12 @@
       if (targetPage) {
         // 그룹 안의 페이지 어디에 놓아도 그 페이지가 속한 가장 안쪽 그룹으로 들어간다.
         if (!canNest) return null;
-        header?.classList.add("group-nest-target");
-        target.classList.add("group-nest-page-target");
-        return { nestIntoGroupId: targetGroupId };
+        // 그룹 안의 페이지 위·아래에 놓으면 그 위치를 그대로 따른다.
+        // 예: 8월 그룹을 2026년 연간계획 페이지 위로 옮길 수 있어야 한다.
+        const rect = target.getBoundingClientRect();
+        const after = clientY >= rect.top + rect.height / 2;
+        target.classList.add(after ? "page-drop-after" : "page-drop-before");
+        return { targetPageId: targetPage.id, after, parentId: targetGroupId };
       }
       if (target.classList.contains("page-group-header")) {
         const headerRect = target.getBoundingClientRect();
@@ -3051,6 +3232,11 @@
         const edge = clamp(headerRect.height * 0.38, 12, 20);
         const inMiddle = clientY > headerRect.top + edge &&
           clientY < headerRect.bottom - edge;
+        const sourceGroup = book.groups.find(group => group.id === sourceGroupId);
+        if (sourceGroup?.parentId === targetGroupId && clientY <= headerRect.top + edge) {
+          target.classList.add("group-nest-target");
+          return { nestIntoGroupId: targetGroupId, atStart: true };
+        }
         if (inMiddle && canNest) {
           target.classList.add("group-nest-target");
           return { nestIntoGroupId: targetGroupId };
@@ -3114,7 +3300,7 @@
         .map((page, index) => targetIds.has(page.groupId) ? index : -1)
         .filter(index => index >= 0);
       insertIndex = indexes.length
-        ? indexes.at(-1) + 1
+        ? (drop.atStart ? indexes[0] : indexes.at(-1) + 1)
         : clamp(originalSourceIndex, 1, remainingPages.length);
       nextParentId = drop.nestIntoGroupId;
       nested = true;
@@ -3134,7 +3320,7 @@
       insertIndex = remainingPages.findIndex(page => page.id === drop.targetPageId);
       if (insertIndex < 0) return false;
       if (drop.after) insertIndex += 1;
-      nextParentId = null;
+      nextParentId = drop.parentId || null;
     }
     if (insertIndex < 0) return false;
 
@@ -9350,12 +9536,14 @@
       book = normalizeBook(createDefaultBook());
     }
     const calendarSetupAdded = ensureCalendarFeatureSetup();
+    const calendarGroupsRepaired = book.__calendarGroupsRepaired === true;
+    delete book.__calendarGroupsRepaired;
     const missionsMaterialized = materializeDueMissions() > 0;
     refs.bookTitle.value = book.title || "나의 불렛북";
     initializeHistory();
     updateViewModeControls();
     renderAll();
-    if (calendarSetupAdded || missionsMaterialized) markDirty();
+    if (calendarGroupsRepaired || calendarSetupAdded || missionsMaterialized) markDirty();
     try {
       cloudSync = window.BulletBookCloudSync?.create({
         getBook: () => clone(book),
