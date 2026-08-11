@@ -908,9 +908,10 @@
     if (title) return title;
     if (page?.type === "monthly") {
       const { month } = monthlyDateContext(page, groups);
-      if (month) return `${month}월 월간 계획`;
+      if (month) return continuedPageLabel(page, `${month}월 월간 계획`);
     }
-    return continuedPageLabel(page, templateNames[page?.type] || fallback);
+    const planTitle = PLAN_TEMPLATE_PAGES[page?.planTemplate]?.title;
+    return continuedPageLabel(page, planTitle || templateNames[page?.type] || fallback);
   }
 
   function groupDescendantIdSet(groupId, groups = book.groups) {
@@ -1062,7 +1063,8 @@
   // 재사용하면서 id는 그대로 두어(h1→q1인데 id는 …-h1) 이 문제를 만들었다.
   // 그래서 연도별로 몇 쪽이 있든 항상 지우고 고정 id 3개로 다시 만든다.
   function migrateYearCalendarPages(value) {
-    const calendarPages = value.pages.filter(page => isYearCalendarTemplate(page.planTemplate));
+    const calendarPages = value.pages.filter(page =>
+      isYearCalendarTemplate(page.planTemplate) && !page.continuationOf);
     if (!calendarPages.length) return;
     const years = [...new Set(calendarPages.map(page => Number(page.year)).filter(Number.isInteger))];
     years.forEach(year => {
@@ -1277,20 +1279,24 @@
     return before - value.goalSystem.missions.length;
   }
 
-  // 연/월/주 그룹은 페이지를 만들 때 자동으로 생기는데, 그 안의 페이지를 모두
-  // 지우면 빈 껍데기만 남아 목록 맨 아래에 "만든 적 없는 그룹"으로 보인다.
-  // 사용자가 직접 만든 그룹(kind 없음)은 비어 있어도 그대로 둔다.
-  function pruneEmptyCalendarGroups(value) {
-    const autoKinds = new Set(["year", "month", "week"]);
-    for (let pass = 0; pass < 4; pass += 1) {
+  // 페이지도 하위 그룹도 없는 그룹은 목록 맨 아래에 빈 제목만 남아 혼란을 준다.
+  // 자동 날짜 그룹과 사용자 그룹을 같은 기준으로 정리하되, 하위 그룹에 페이지가
+  // 있으면 상위 경로는 그대로 보존한다.
+  function pruneEmptyPageGroups(value) {
+    const removedIds = new Set();
+    let removed = true;
+    while (removed) {
       const usedByPage = new Set(value.pages.map(page => page.groupId).filter(Boolean));
       const usedByChild = new Set(value.groups.map(group => group.parentId).filter(Boolean));
-      const before = value.groups.length;
-      value.groups = value.groups.filter(group =>
-        !autoKinds.has(group.kind) || usedByPage.has(group.id) || usedByChild.has(group.id)
-      );
-      if (value.groups.length === before) break;
+      const removable = new Set(value.groups
+        .filter(group => !usedByPage.has(group.id) && !usedByChild.has(group.id))
+        .map(group => group.id));
+      removed = removable.size > 0;
+      if (!removed) break;
+      value.groups = value.groups.filter(group => !removable.has(group.id));
+      removable.forEach(groupId => removedIds.add(groupId));
     }
+    return removedIds;
   }
 
   function normalizeBook(value) {
@@ -1413,9 +1419,9 @@
       });
     });
     alignWeeklyPairGroups(value.pages, value.groups);
-    // 페이지가 하나도 남지 않은 연/월/주 그룹은 여기서 걷어낸다. 남겨두면
+    // 페이지가 하나도 남지 않은 그룹은 여기서 걷어낸다. 남겨두면
     // 페이지 목록 맨 아래에 "만든 적 없는 빈 그룹"으로 떠 보인다.
-    pruneEmptyCalendarGroups(value);
+    pruneEmptyPageGroups(value);
     // 상위 그룹과 모든 하위 그룹을 하나의 연속된 페이지 블록으로 유지한다.
     value.pages = normalizeGroupPageOrder(value.pages, value.groups);
     return value;
@@ -1879,27 +1885,20 @@
     pages.forEach(page => {
       if (page?.type !== "cover") page.groupId = group?.id || null;
     });
-    pruneEmptyCalendarGroups();
+    pruneEmptyBookGroups();
     const focusedId = activePageId || pages[0]?.id;
     book.pages = normalizeGroupPageOrder(book.pages, book.groups);
     currentIndex = Math.max(0, book.pages.findIndex(page => page.id === focusedId));
     activePageId = book.pages[currentIndex]?.id || [...ids][0] || null;
   }
 
-  function pruneEmptyCalendarGroups() {
-    let removed = true;
-    while (removed) {
-      removed = false;
-      const removable = new Set(book.groups
-        .filter(group => ["year", "month", "week"].includes(group.kind))
-        .filter(group => !book.pages.some(page => page.groupId === group.id))
-        .filter(group => !book.groups.some(candidate => candidate.parentId === group.id))
-        .map(group => group.id));
-      if (!removable.size) break;
-      book.groups = book.groups.filter(group => !removable.has(group.id));
-      removable.forEach(groupId => collapsedGroups.delete(groupId));
-      removed = true;
+  function pruneEmptyBookGroups() {
+    const removedIds = pruneEmptyPageGroups(book);
+    removedIds.forEach(groupId => collapsedGroups.delete(groupId));
+    if (removedIds.size) {
+      localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...collapsedGroups]));
     }
+    return removedIds;
   }
 
   function setYearCalendarYear(page, yearValue) {
@@ -2826,6 +2825,30 @@
     (childrenByParent.get("") || []).forEach(group => appendMissingTree(group));
     book.groups.filter(group => !renderedGroups.has(group.id))
       .forEach(group => appendMissingTree(group, groupPathForId(group.id).length - 1));
+    const topDropZone = document.createElement("div");
+    topDropZone.className = "page-list-top-drop-zone";
+    topDropZone.textContent = "여기에 놓으면 맨 위로 이동";
+    topDropZone.addEventListener("dragover", event => {
+      if (!pageListDragState) return;
+      event.preventDefault();
+      topDropZone.classList.add("active");
+      pageListDragState.drop = { bookStart: true };
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    });
+    topDropZone.addEventListener("drop", event => {
+      if (!pageListDragState) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const state = pageListDragState;
+      pageListDragState = null;
+      clearPageListDropVisuals();
+      applyPageListDragDrop(state, { bookStart: true });
+    });
+    const coverItem = book.pages[0]?.type === "cover"
+      ? $(`.page-item[data-page-id="${book.pages[0].id}"]`, refs.pageList)
+      : null;
+    if (coverItem) coverItem.after(topDropZone);
+    else refs.pageList.prepend(topDropZone);
     [...selectedPageIds].forEach(pageId => {
       if (!renderedPageIds.has(pageId)) selectedPageIds.delete(pageId);
     });
@@ -2850,13 +2873,15 @@
       .forEach(item => item.classList.remove(
         "page-group-drop-target", "group-nest-target", "group-reorder-source", "group-drop-before", "group-drop-after"
       ));
+    $$(".page-list-top-drop-zone.active", refs.pageList)
+      .forEach(item => item.classList.remove("active"));
     refs.pageList.classList.remove("reordering");
   }
 
   function pageListTargetAt(clientX, clientY) {
-    const candidates = $$(".page-item, .page-group-header", refs.pageList);
+    const candidates = $$(".page-item, .page-group-header, .page-list-top-drop-zone", refs.pageList);
     let target = document.elementFromPoint?.(clientX, clientY)
-      ?.closest?.(".page-item, .page-group-header");
+      ?.closest?.(".page-item, .page-group-header, .page-list-top-drop-zone");
     if (target && refs.pageList.contains(target)) return target;
     target = candidates.find(item => {
       const rect = item.getBoundingClientRect();
@@ -2944,6 +2969,11 @@
     $$(".page-group-header.page-group-drop-target", refs.pageList)
       .forEach(item => item.classList.remove("page-group-drop-target"));
 
+    if (target.classList.contains("page-list-top-drop-zone")) {
+      target.classList.add("active");
+      return { bookStart: true };
+    }
+
     if (target.classList.contains("page-group-header")) {
       const group = book.groups.find(item => item.id === target.dataset.groupId);
       if (!group) return null;
@@ -2988,6 +3018,11 @@
       .forEach(item => item.classList.remove(
         "page-group-drop-target", "group-nest-target", "group-drop-before", "group-drop-after"
       ));
+
+    if (target.classList.contains("page-list-top-drop-zone")) {
+      target.classList.add("active");
+      return { bookStart: true };
+    }
 
     const targetPage = target.classList.contains("page-item")
       ? book.pages.find(page => page.id === target.dataset.pageId)
@@ -3069,7 +3104,10 @@
     let insertIndex = -1;
     let nextParentId = sourceGroup.parentId || null;
     let nested = false;
-    if (drop.nestIntoGroupId) {
+    if (drop.bookStart) {
+      insertIndex = remainingPages[0]?.type === "cover" ? 1 : 0;
+      nextParentId = null;
+    } else if (drop.nestIntoGroupId) {
       if (!canSetGroupParent(sourceGroupId, drop.nestIntoGroupId)) return false;
       const targetIds = groupDescendantIdSet(drop.nestIntoGroupId);
       const indexes = remainingPages
@@ -3109,6 +3147,7 @@
     ];
     book.pages = normalizeGroupPageOrder(book.pages, book.groups);
     syncGroupOrderToPageOrder();
+    pruneEmptyBookGroups();
     const afterState = JSON.stringify({
       pages: book.pages.map(page => page.id),
       groups: book.groups.map(group => [group.id, group.parentId || null]),
@@ -3140,6 +3179,7 @@
     movedPages.forEach(page => page.groupId = targetPage.groupId || null);
     remainingPages.splice(Math.max(1, insertIndex), 0, ...movedPages);
     book.pages = normalizeGroupPageOrder(remainingPages, book.groups);
+    pruneEmptyBookGroups();
     const afterState = JSON.stringify(book.pages.map(page => [page.id, page.groupId || null]));
     if (afterState === beforeState) return false;
     currentIndex = Math.max(0, book.pages.findIndex(page => page.id === activePageId));
@@ -3154,6 +3194,31 @@
 
   function reorderPageFromList(sourceId, targetId, after) {
     return reorderPagesFromList([sourceId], targetId, after);
+  }
+
+  function movePagesToBookStart(sourceIds) {
+    const orderedIds = orderedMovablePageIds(sourceIds);
+    const sourceSet = new Set(orderedIds);
+    if (!orderedIds.length) return false;
+    const beforeState = JSON.stringify(book.pages.map(page => [page.id, page.groupId || null]));
+    const movedPages = book.pages.filter(page => sourceSet.has(page.id));
+    const remainingPages = book.pages.filter(page => !sourceSet.has(page.id));
+    movedPages.forEach(page => page.groupId = null);
+    const insertIndex = remainingPages[0]?.type === "cover" ? 1 : 0;
+    remainingPages.splice(insertIndex, 0, ...movedPages);
+    book.pages = normalizeGroupPageOrder(remainingPages, book.groups);
+    pruneEmptyBookGroups();
+    syncGroupOrderToPageOrder();
+    const afterState = JSON.stringify(book.pages.map(page => [page.id, page.groupId || null]));
+    if (afterState === beforeState) return false;
+    currentIndex = Math.max(0, book.pages.findIndex(page => page.id === activePageId));
+    selection = null;
+    commitHistory();
+    renderAll();
+    showToast(orderedIds.length > 1
+      ? `${orderedIds.length}개 페이지를 맨 위로 이동했습니다`
+      : "페이지를 맨 위로 이동했습니다");
+    return true;
   }
 
   function movePagesIntoGroup(sourceIds, groupId, atStart = false) {
@@ -3181,6 +3246,7 @@
     }
     remainingPages.splice(insertIndex, 0, ...movedPages);
     book.pages = normalizeGroupPageOrder(remainingPages, book.groups);
+    pruneEmptyBookGroups();
     collapsedGroups.delete(group.id);
     localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...collapsedGroups]));
     if (!book.pages.some(page => page.id === activePageId)) activePageId = movedPages[0].id;
@@ -3200,6 +3266,7 @@
 
   function applyPageListDrop(sourceIds, drop) {
     if (!drop) return false;
+    if (drop.bookStart) return movePagesToBookStart(sourceIds);
     if (drop.groupId) return movePagesIntoGroup(sourceIds, drop.groupId, drop.atStart === true);
     return reorderPagesFromList(sourceIds, drop.targetId, drop.after);
   }
@@ -6054,11 +6121,12 @@
     refs.mobilePageWriteWeekStart.value = isWeekly
       ? normalizedWeekStart(page.weekStart) || ""
       : "";
-    const supportsContinuation = page.type === "daily" || isWeeklyPage(page);
-    refs.mobilePageWriteAddContinuationButton.hidden = !supportsContinuation;
-    refs.mobilePageWriteAddContinuationButton.textContent = page.type === "daily"
-      ? "＋ 같은 날짜 다음 장 추가"
-      : "＋ 같은 주차 다음 장 추가";
+    const canAddSamePage = page.type !== "cover";
+    refs.mobilePageWriteAddContinuationButton.hidden = false;
+    refs.mobilePageWriteAddContinuationButton.disabled = !canAddSamePage;
+    refs.mobilePageWriteAddContinuationButton.textContent = canAddSamePage
+      ? "＋ 이 페이지와 같은 양식 추가"
+      : "표지는 한 장만 사용할 수 있습니다";
     refs.mobilePageWriteTargets.innerHTML = "";
     targets.forEach(target => {
       const button = document.createElement("button");
@@ -6274,7 +6342,7 @@
   }
 
   function createMobileWriteContinuationPage(sourcePage) {
-    if (!sourcePage || (sourcePage.type !== "daily" && !isWeeklyPage(sourcePage))) return null;
+    if (!sourcePage || sourcePage.type === "cover") return null;
     const chain = mobileWriteContinuationChain(sourcePage);
     const rootId = sourcePage.continuationOf || sourcePage.id;
     const templatePage = chain.find(candidate => candidate.id === rootId) || sourcePage;
@@ -6284,9 +6352,10 @@
     const metadata = clone(templatePage);
     [
       "id", "elements", "createdAt", "updatedAt", "title", "titleCustomized",
-      "continuationOf", "continuationIndex", "weeklyPairId",
+      "continuationOf", "continuationIndex", "weeklyPairId", "calendarPairId",
     ].forEach(key => delete metadata[key]);
-    const templateText = clone(templatePage.templateText || {});
+    const templateText = templatePage.type === "daily" || isWeeklyPage(templatePage)
+      ? clone(templatePage.templateText || {}) : {};
     delete templateText[pageTitleTemplateField(templatePage)];
     const continuation = makePage(templatePage.type, "", {
       ...metadata,
@@ -6306,13 +6375,13 @@
 
   function addManualMobileWriteContinuationPage() {
     const page = selectedMobileWritePage();
-    if (!page || (page.type !== "daily" && !isWeeklyPage(page))) {
-      refs.mobilePageWriteHint.textContent = "일간·주간 계획에서만 같은 양식의 다음 장을 만들 수 있습니다.";
+    if (!page || page.type === "cover") {
+      refs.mobilePageWriteHint.textContent = "표지는 한 장만 사용할 수 있습니다.";
       return;
     }
     const continuation = createMobileWriteContinuationPage(page);
     if (!continuation) {
-      refs.mobilePageWriteHint.textContent = "다음 장을 만들지 못했습니다. 페이지를 다시 선택해 주세요.";
+      refs.mobilePageWriteHint.textContent = "같은 양식 페이지를 만들지 못했습니다. 페이지를 다시 선택해 주세요.";
       return;
     }
     currentIndex = book.pages.findIndex(candidate => candidate.id === continuation.id);
@@ -6322,9 +6391,9 @@
     renderAll();
     refreshMobileWritePageSelect(continuation.id);
     renderMobilePageWriteTargets();
-    refs.mobilePageWriteHint.textContent = `${pageDisplayTitle(continuation)}을 만들었습니다. 기록할 칸과 내용을 선택해 이어서 쓰세요.`;
+    refs.mobilePageWriteHint.textContent = `${pageDisplayTitle(continuation)}을 만들었습니다. 바로 이어서 기록할 수 있습니다.`;
     requestAnimationFrame(() => refs.mobilePageWriteInput.focus());
-    showToast(`${pageDisplayTitle(continuation)}을 추가했습니다`);
+    showToast("현재 페이지와 같은 양식을 추가했습니다");
   }
 
   function mobileWriteDestination(sourcePage, sourceTarget, text) {
@@ -7410,6 +7479,7 @@
     const year = clamp(Math.round(Number(yearValue) || new Date().getFullYear()), 1900, 2200);
     const existing = book.pages.filter(page =>
       isYearCalendarTemplate(page.planTemplate) &&
+      !page.continuationOf &&
       Number(page.year) === year
     );
     if (existing.length >= YEAR_CALENDAR_PAGES.length) {
@@ -7865,7 +7935,7 @@
     const currentPageId = book.pages[currentIndex]?.id;
     const firstDeletedIndex = book.pages.findIndex(page => deleteIds.has(page.id));
     book.pages = book.pages.filter(page => !deleteIds.has(page.id));
-    pruneEmptyCalendarGroups();
+    pruneEmptyBookGroups();
     selectedPageIds.clear();
 
     const retainedCurrentIndex = book.pages.findIndex(page => page.id === currentPageId);
@@ -8860,6 +8930,7 @@
         if (ungroupedIds.has(candidate.id)) candidate.groupId = null;
       });
       book.pages = normalizeGroupPageOrder(book.pages, book.groups);
+      pruneEmptyBookGroups();
       currentIndex = Math.max(0, book.pages.findIndex(candidate => candidate.id === activePageId));
       commitHistory();
       renderAll();
