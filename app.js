@@ -3216,9 +3216,12 @@
       if (targetPage) {
         // 그룹 안의 페이지 어디에 놓아도 그 페이지가 속한 가장 안쪽 그룹으로 들어간다.
         if (!canNest) return null;
-        header?.classList.add("group-nest-target");
-        target.classList.add("group-nest-page-target");
-        return { nestIntoGroupId: targetGroupId };
+        // 그룹 안의 페이지 위·아래에 놓으면 그 위치를 그대로 따른다.
+        // 예: 8월 그룹을 2026년 연간계획 페이지 위로 옮길 수 있어야 한다.
+        const rect = target.getBoundingClientRect();
+        const after = clientY >= rect.top + rect.height / 2;
+        target.classList.add(after ? "page-drop-after" : "page-drop-before");
+        return { targetPageId: targetPage.id, after, parentId: targetGroupId };
       }
       if (target.classList.contains("page-group-header")) {
         const headerRect = target.getBoundingClientRect();
@@ -3229,6 +3232,11 @@
         const edge = clamp(headerRect.height * 0.38, 12, 20);
         const inMiddle = clientY > headerRect.top + edge &&
           clientY < headerRect.bottom - edge;
+        const sourceGroup = book.groups.find(group => group.id === sourceGroupId);
+        if (sourceGroup?.parentId === targetGroupId && clientY <= headerRect.top + edge) {
+          target.classList.add("group-nest-target");
+          return { nestIntoGroupId: targetGroupId, atStart: true };
+        }
         if (inMiddle && canNest) {
           target.classList.add("group-nest-target");
           return { nestIntoGroupId: targetGroupId };
@@ -3292,7 +3300,7 @@
         .map((page, index) => targetIds.has(page.groupId) ? index : -1)
         .filter(index => index >= 0);
       insertIndex = indexes.length
-        ? indexes.at(-1) + 1
+        ? (drop.atStart ? indexes[0] : indexes.at(-1) + 1)
         : clamp(originalSourceIndex, 1, remainingPages.length);
       nextParentId = drop.nestIntoGroupId;
       nested = true;
@@ -3312,7 +3320,7 @@
       insertIndex = remainingPages.findIndex(page => page.id === drop.targetPageId);
       if (insertIndex < 0) return false;
       if (drop.after) insertIndex += 1;
-      nextParentId = null;
+      nextParentId = drop.parentId || null;
     }
     if (insertIndex < 0) return false;
 
