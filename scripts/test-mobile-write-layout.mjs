@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
-const source = await readFile(new URL("../app.js", import.meta.url), "utf8");
+const [source, markup, styles] = await Promise.all([
+  readFile(new URL("../app.js", import.meta.url), "utf8"),
+  readFile(new URL("../index.html", import.meta.url), "utf8"),
+  readFile(new URL("../styles.css", import.meta.url), "utf8"),
+]);
 
 function extractFunction(name) {
   const start = source.indexOf(`function ${name}(`);
@@ -76,6 +80,8 @@ const context = vm.createContext({
 const names = [
   "continuationPageNumber",
   "continuedPageLabel",
+  "mobileTextCharacterWidth",
+  "mobileTextWrappedLineCount",
   "mobileTextHeight",
   "nextMobileWriteSlot",
   "weeklyPairPages",
@@ -118,6 +124,36 @@ assert.equal(fourth.page.elements.length, 0);
 assert.equal(fourth.slot.y, 192);
 assert.equal(context.continuedPageLabel(fourth.page, "8월 11일(화)"), "8월 11일(화) · 계속 2");
 assert.deepEqual(context.book.pages.map(candidate => candidate.id), ["daily-root", fourth.page.id]);
+const longTarget = { ...dailyTarget, id: "daily-log", label: "오늘의 기록", maxRows: 10 };
+const longPage = {
+  id: "daily-long",
+  type: "daily",
+  title: "",
+  pageDate: "2026-08-12",
+  groupId: "week-group",
+  templateText: {},
+  _targets: [longTarget],
+  elements: [],
+};
+context.book.pages.push(longPage);
+const longKoreanText = "− 오늘의 기록에서 글자 폭과 줄바꿈을 실제 높이에 맞춰 안전하게 배치합니다";
+const longFirst = context.mobileWriteDestination(longPage, longTarget, longKoreanText);
+assert.equal(longFirst.page.id, "daily-long");
+assert.ok(longFirst.slot.height > 48, "long Korean text must reserve more than one row");
+longPage.elements.push({
+  id: "long-first",
+  type: "text",
+  text: longKoreanText,
+  gridLocked: true,
+  layoutTarget: "daily-log",
+  ...longFirst.slot,
+});
+const longSecond = context.mobileWriteDestination(longPage, longTarget, "− 다음 기록");
+assert.equal(longSecond.page.id, "daily-long");
+assert.ok(
+  longSecond.slot.y >= longFirst.slot.y + longFirst.slot.height,
+  "the next record must start below the rendered text height"
+);
 
 const weeklyTarget = {
   id: "weekly-overview",
@@ -171,4 +207,8 @@ assert.equal(weeklyOverflow.page.continuationOf, "weekly-left");
 const weeklyIds = context.book.pages.map(candidate => candidate.id);
 assert.ok(weeklyIds.indexOf("weekly-right") < weeklyIds.indexOf(weeklyOverflow.page.id));
 
+assert.match(markup, /id="mobilePageWriteAddContinuationButton"/u);
+assert.match(source, /mobilePageWriteAddContinuationButton\.addEventListener/u);
+assert.match(styles, /\.mobile-bottom-nav small\s*\{[\s\S]*?white-space:\s*nowrap;/u);
+assert.match(styles, /\.page-write-nav-button small::after\s*\{[\s\S]*?content:\s*"페이지 쓰기";/u);
 console.log("Mobile write sequential layout and continuation regression test passed.");

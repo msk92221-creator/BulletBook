@@ -412,11 +412,12 @@
         <button type="button" data-write-mode="once" class="active">한 번 쓰기</button>
         <button type="button" data-write-mode="routine">루틴 만들기</button>
       </div>
-      <div id="mobileWriteOnceFields">
+      <div id="mobileWriteOnceFields" class="mobile-write-once-fields">
         <label class="mobile-write-field">
           <span>기록할 페이지</span>
           <select id="mobilePageWritePageSelect"></select>
         </label>
+        <button type="button" id="mobilePageWriteAddContinuationButton" class="quiet-button mobile-write-next-page-button" hidden>＋ 같은 양식 다음 장 추가</button>
         <label id="mobilePageWriteWeekField" class="mobile-write-field" hidden>
           <span>몇 주차</span>
           <input id="mobilePageWriteWeekNumber" type="text" inputmode="numeric" maxlength="12" placeholder="예: 31">

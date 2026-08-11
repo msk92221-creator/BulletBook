@@ -2104,6 +2104,22 @@ body.resizing-page-list {
   display: grid;
   gap: 6px;
 }
+.mobile-write-once-fields {
+  display: grid;
+  gap: 14px;
+}
+.mobile-write-next-page-button {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #aebbcf;
+  color: #244da8;
+  background: #f4f7fc;
+  font-weight: 750;
+}
+.mobile-write-next-page-button:hover {
+  border-color: #6f91e8;
+  background: #e7eeff;
+}
 .mobile-page-write-form [hidden] {
   display: none !important;
 }
@@ -2673,7 +2689,18 @@ body.resizing-page-list {
 }
 .mobile-bottom-nav button:active { background: #eeeae8; }
 .mobile-bottom-nav button > span { font-size: 21px; line-height: 23px; }
-.mobile-bottom-nav small { font-size: 10px; font-weight: 650; }
+.mobile-bottom-nav small {
+  min-width: 0;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.mobile-bottom-nav .page-write-nav-button small { font-size: 0; }
+.mobile-bottom-nav .page-write-nav-button small::after {
+  content: "페이지 쓰기";
+  font-size: 10px;
+}
 .mobile-bottom-nav .page-write-nav-button > span {
   color: #214fbd;
   font-weight: 800;
