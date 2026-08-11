@@ -38,6 +38,8 @@ const context = vm.createContext({
   activePageId: "annual-1",
   currentIndex: 1,
   selection: null,
+  selectedPageIds: new Set(),
+  isWeeklyPage: page => page.type === "weekly-left" || page.type === "weekly-right",
   commitHistory: () => {},
   renderAll: () => {},
   showToast: () => {},
@@ -49,6 +51,8 @@ const names = [
   "canSetGroupParent",
   "normalizeGroupPageOrder",
   "syncGroupOrderToPageOrder",
+  "orderedMovablePageIds",
+  "movePagesToBookStart",
   "reorderGroupFromList",
 ];
 vm.runInContext(
@@ -92,4 +96,32 @@ assert.deepEqual(
   ["cover", "annual-1", "august-page", "annual-2", "september-page"]
 );
 
+
+context.book = {
+  groups: [
+    { id: "year", name: "2026년", kind: "year", parentId: null },
+    { id: "annual", name: "연간계획", kind: "custom", parentId: "year" },
+  ],
+  pages: [
+    { id: "cover", type: "cover", groupId: null },
+    { id: "index", type: "blank", groupId: "annual", elements: [{ text: "목차" }] },
+    { id: "symbols", type: "blank", groupId: "annual", elements: [{ text: "기호" }] },
+    { id: "annual-1", type: "blank", groupId: "annual" },
+  ],
+};
+context.activePageId = "index";
+context.selectedPageIds = new Set(["index", "symbols"]);
+assert.equal(context.movePagesToBookStart(["symbols", "index"], true), true);
+assert.deepEqual(
+  [...context.book.pages].map(page => [page.id, page.groupId]),
+  [
+    ["cover", null],
+    ["index", null],
+    ["symbols", null],
+    ["annual-1", "annual"],
+  ]
+);
+assert.equal(context.book.pages[1].elements[0].text, "목차");
+assert.equal(context.book.pages[2].elements[0].text, "기호");
+assert.equal(context.selectedPageIds.size, 0);
 console.log("Nested group page ordering: ok");
