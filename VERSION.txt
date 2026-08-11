@@ -1,5 +1,5 @@
 BulletBook Windows + Android
-Version 0.40.6
+Version 0.40.7
 
 Windows + Android source
 Document format: bulletbook v6 (.buj)
