@@ -50,7 +50,7 @@ const context = vm.createContext({
   PAGE_W: 672,
   PAGE_H: 1008,
   GRID_SIZE: 24,
-  book: { pages: [page] },
+  book: { pages: [page], groups: [] },
   clamp: (value, min, max) => Math.max(min, Math.min(max, value)),
   snapToGrid: (value, min = 0, max = Number.POSITIVE_INFINITY) =>
     Math.max(min, Math.min(max, Math.round((Number(value) || 0) / 24) * 24)),
@@ -78,6 +78,9 @@ const context = vm.createContext({
 });
 
 const names = [
+  "groupPathForId",
+  "normalizeGroupPageOrder",
+  "pruneEmptyPageGroups",
   "continuationPageNumber",
   "continuedPageLabel",
   "mobileTextCharacterWidth",
@@ -207,7 +210,57 @@ assert.equal(weeklyOverflow.page.continuationOf, "weekly-left");
 const weeklyIds = context.book.pages.map(candidate => candidate.id);
 assert.ok(weeklyIds.indexOf("weekly-right") < weeklyIds.indexOf(weeklyOverflow.page.id));
 
+const projectPage = {
+  id: "project-root",
+  type: "blank",
+  title: "프로젝트 계획",
+  planTemplate: "project",
+  calendarPairId: "must-not-be-copied",
+  groupId: "project-group",
+  templateText: { "project-subtitle": "나만의 기준" },
+  elements: [{ id: "project-entry", type: "text", text: "기존 기록" }],
+};
+context.book.pages.push(projectPage);
+const projectCopy = context.createMobileWriteContinuationPage(projectPage);
+assert.equal(projectCopy.type, "blank");
+assert.equal(projectCopy.planTemplate, "project");
+assert.equal(projectCopy.groupId, "project-group");
+assert.equal(projectCopy.continuationOf, "project-root");
+assert.equal(projectCopy.calendarPairId, undefined);
+assert.equal(projectCopy.elements.length, 0);
+assert.equal(Object.keys(projectCopy.templateText).length, 0);
+assert.equal(context.createMobileWriteContinuationPage({ id: "cover", type: "cover" }), null);
+
+const groupedBook = {
+  groups: [
+    { id: "year", parentId: null },
+    { id: "month", parentId: "year" },
+    { id: "empty-parent", parentId: null },
+    { id: "empty-child", parentId: "empty-parent" },
+    { id: "empty-custom", parentId: null },
+  ],
+  pages: [
+    { id: "cover", type: "cover", groupId: null },
+    { id: "annual", type: "blank", groupId: "year" },
+    { id: "month-page", type: "monthly", groupId: "month" },
+  ],
+};
+const removedGroups = context.pruneEmptyPageGroups(groupedBook);
+assert.deepEqual([...removedGroups].sort(), ["empty-child", "empty-custom", "empty-parent"]);
+assert.deepEqual(groupedBook.groups.map(group => group.id), ["year", "month"]);
+assert.deepEqual(
+  [...context.normalizeGroupPageOrder(groupedBook.pages, groupedBook.groups)]
+    .map(candidate => candidate.id),
+  ["cover", "annual", "month-page"],
+  "a page placed first in a parent group must remain above its child groups"
+);
+
 assert.match(markup, /id="mobilePageWriteAddContinuationButton"/u);
+assert.doesNotMatch(markup, /id="mobilePageWriteAddContinuationButton"[^>]*hidden/u);
+assert.match(source, /sourcePage\.type === "cover"/u);
+assert.match(source, /drop\.bookStart/u);
+assert.match(source, /pruneEmptyBookGroups/u);
+assert.match(styles, /\.page-list-top-drop-zone/u);
 assert.match(source, /mobilePageWriteAddContinuationButton\.addEventListener/u);
 assert.match(styles, /\.mobile-bottom-nav small\s*\{[\s\S]*?white-space:\s*nowrap;/u);
 assert.match(styles, /\.page-write-nav-button small::after\s*\{[\s\S]*?content:\s*"페이지 쓰기";/u);
