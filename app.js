@@ -357,6 +357,7 @@
     mobileRoutineIntervalCount: $("#mobileRoutineIntervalCount"),
     mobileRoutineIntervalUnit: $("#mobileRoutineIntervalUnit"),
     mobilePageWritePageSelect: $("#mobilePageWritePageSelect"),
+    mobilePageWriteAddContinuationButton: $("#mobilePageWriteAddContinuationButton"),
     mobilePageWriteWeekField: $("#mobilePageWriteWeekField"),
     mobilePageWriteWeekNumber: $("#mobilePageWriteWeekNumber"),
     mobilePageWriteWeekStartField: $("#mobilePageWriteWeekStartField"),
@@ -5879,6 +5880,20 @@
       book.pages[currentIndex];
   }
 
+  function refreshMobileWritePageSelect(preferredPageId) {
+    const indexes = visibleIndexes();
+    refs.mobilePageWritePageSelect.innerHTML = indexes.map(index => {
+      const page = book.pages[index];
+      const title = pageDisplayTitle(page, `페이지 ${index + 1}`);
+      return `<option value="${escapeHtml(page.id)}">${index + 1}. ${escapeHtml(title)}</option>`;
+    }).join("");
+    const preferred = indexes
+      .map(index => book.pages[index])
+      .find(page => page.id === preferredPageId) || book.pages[indexes[0]];
+    refs.mobilePageWritePageSelect.value = preferred?.id || "";
+    return preferred;
+  }
+
   function updateMobileWriteSymbolButtons() {
     $$(".mobile-write-symbols button").forEach(button =>
       button.classList.toggle("active", button.dataset.mobileWriteSymbol === mobileWriteSymbol)
@@ -6039,6 +6054,11 @@
     refs.mobilePageWriteWeekStart.value = isWeekly
       ? normalizedWeekStart(page.weekStart) || ""
       : "";
+    const supportsContinuation = page.type === "daily" || isWeeklyPage(page);
+    refs.mobilePageWriteAddContinuationButton.hidden = !supportsContinuation;
+    refs.mobilePageWriteAddContinuationButton.textContent = page.type === "daily"
+      ? "＋ 같은 날짜 다음 장 추가"
+      : "＋ 같은 주차 다음 장 추가";
     refs.mobilePageWriteTargets.innerHTML = "";
     targets.forEach(target => {
       const button = document.createElement("button");
@@ -6123,24 +6143,58 @@
     requestAnimationFrame(() => refs.mobilePageWriteInput.focus());
   }
 
+  function mobileTextCharacterWidth(character, fontSize) {
+    if (/\s/u.test(character)) return fontSize * .36;
+    if (/[\u1100-\u11ff\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff01-\uff60\uffe0-\uffe6]/u.test(character)) {
+      return fontSize;
+    }
+    if (/[ilI1|.,'`:;]/u.test(character)) return fontSize * .38;
+    if (/[MW@#%&]/u.test(character)) return fontSize * .9;
+    return fontSize * .65;
+  }
+
+  function mobileTextWrappedLineCount(text, target) {
+    const fontSize = target.fontSize || 16;
+    const usableWidth = Math.max(40, target.width - 20);
+    return String(text).split("\n").reduce((total, paragraph) => {
+      if (!paragraph) return total + 1;
+      let lines = 1;
+      let lineWidth = 0;
+      Array.from(paragraph).forEach(character => {
+        const characterWidth = mobileTextCharacterWidth(character, fontSize);
+        if (lineWidth > 0 && lineWidth + characterWidth > usableWidth) {
+          lines += 1;
+          lineWidth = characterWidth;
+        } else {
+          lineWidth += characterWidth;
+        }
+      });
+      return total + lines;
+    }, 0);
+  }
+
   function mobileTextHeight(text, target) {
     const fontSize = target.fontSize || 16;
-    const usableWidth = Math.max(40, target.width - 12);
-    const capacity = Math.max(4, Math.floor(usableWidth / (fontSize * .58)));
-    const lines = String(text).split("\n")
-      .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / capacity)), 0);
+    const lines = mobileTextWrappedLineCount(text, target);
     const minimum = target.compact ? Math.max(16, target.rowGap - 5) : 30;
-    const maximum = target.compact ? Math.max(minimum, target.rowGap - 2) : target.rowGap * 4 - 6;
-    return clamp(Math.ceil(lines * fontSize * 1.45 + 8), minimum, maximum);
+    const measured = Math.ceil(lines * fontSize * 1.45 + 8);
+    if (!target.compact) return Math.max(minimum, measured);
+    const maximum = Math.max(minimum, target.rowGap - 2);
+    return clamp(measured, minimum, maximum);
   }
 
   function nextMobileWriteSlot(page, target, text) {
     const x = snapToGrid(target.x, 0, PAGE_W - GRID_SIZE);
     const width = Math.min(snapSizeToGrid(target.width), PAGE_W - x);
-    const height = snapSizeToGrid(mobileTextHeight(text, {
+    const measuredHeight = mobileTextHeight(text, {
       ...target,
       width,
-    }));
+    });
+    // 텍스트 박스는 실제 필요 높이보다 작아지면 다음 기록이 글자 위에 겹친다.
+    // 일반 칸은 가장 가까운 모눈이 아니라 다음 모눈까지 항상 올림한다.
+    const height = target.compact
+      ? snapSizeToGrid(measuredHeight)
+      : Math.max(GRID_SIZE, Math.ceil(measuredHeight / GRID_SIZE) * GRID_SIZE);
     // 월간 날짜 줄은 31칸을 페이지에 꽉 채우려고 모눈(24)이 아닌 32px 간격을
     // 쓴다. 여기서 모눈에 스냅하면 날짜 줄과 최대 12px 어긋나므로 그대로 둔다.
     const isMonthlyRow = target.id === "monthly-schedule";
@@ -6248,6 +6302,29 @@
     const lastIndex = Math.max(...insertionPeers.map(candidate => book.pages.indexOf(candidate)));
     book.pages.splice(lastIndex + 1, 0, continuation);
     return continuation;
+  }
+
+  function addManualMobileWriteContinuationPage() {
+    const page = selectedMobileWritePage();
+    if (!page || (page.type !== "daily" && !isWeeklyPage(page))) {
+      refs.mobilePageWriteHint.textContent = "일간·주간 계획에서만 같은 양식의 다음 장을 만들 수 있습니다.";
+      return;
+    }
+    const continuation = createMobileWriteContinuationPage(page);
+    if (!continuation) {
+      refs.mobilePageWriteHint.textContent = "다음 장을 만들지 못했습니다. 페이지를 다시 선택해 주세요.";
+      return;
+    }
+    currentIndex = book.pages.findIndex(candidate => candidate.id === continuation.id);
+    activePageId = continuation.id;
+    selection = null;
+    commitHistory();
+    renderAll();
+    refreshMobileWritePageSelect(continuation.id);
+    renderMobilePageWriteTargets();
+    refs.mobilePageWriteHint.textContent = `${pageDisplayTitle(continuation)}을 만들었습니다. 기록할 칸과 내용을 선택해 이어서 쓰세요.`;
+    requestAnimationFrame(() => refs.mobilePageWriteInput.focus());
+    showToast(`${pageDisplayTitle(continuation)}을 추가했습니다`);
   }
 
   function mobileWriteDestination(sourcePage, sourceTarget, text) {
@@ -8795,6 +8872,10 @@
       mobileWriteDetail = "";
       renderMobilePageWriteTargets();
     });
+    refs.mobilePageWriteAddContinuationButton.addEventListener(
+      "click",
+      addManualMobileWriteContinuationPage
+    );
     refs.mobilePageWriteWeekNumber.addEventListener("change", () => {
       const page = selectedMobileWritePage();
       if (!page || (page.type !== "weekly-left" && page.type !== "weekly-right")) return;
