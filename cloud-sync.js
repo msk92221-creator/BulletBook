@@ -286,15 +286,25 @@
   }
 
   function entityOrder(primary, secondary, base) {
-    const order = [];
-    const seen = new Set();
-    [primary, secondary, base].forEach(values => {
-      (Array.isArray(values) ? values : []).forEach((value, index) => {
-        const id = entityKey(value, index);
-        if (seen.has(id)) return;
+    let order = [...indexedEntities(primary).keys()];
+    const seen = new Set(order);
+    [secondary, base].forEach(values => {
+      // 다른 기기에서 추가한 항목은 다음 공통 이웃 앞에 넣는다. 모두 끝에
+      // 붙이면 기존 페이지 사이에 추가한 새 페이지의 위치가 사라진다.
+      const before = new Map();
+      let pending = [];
+      [...indexedEntities(values).keys()].forEach(id => {
+        if (seen.has(id)) {
+          if (pending.length) {
+            before.set(id, pending);
+            pending = [];
+          }
+          return;
+        }
         seen.add(id);
-        order.push(id);
+        pending.push(id);
       });
+      order = order.flatMap(id => [...(before.get(id) || []), id]).concat(pending);
     });
     return order;
   }
@@ -336,10 +346,20 @@
     const base = indexedEntities(baseValues);
     const local = indexedEntities(localValues);
     const remote = indexedEntities(remoteValues);
-    const primary = preferRemote ? remoteValues : localValues;
-    const secondary = preferRemote ? localValues : remoteValues;
+    // 내용 수정 시각과 목록 재배치는 별개다. 공통 기준본의 상대 순서에서
+    // 한쪽만 바뀌었다면 그 재배치를 살리고, 양쪽 재배치만 충돌로 취급한다.
+    const common = new Set([...base.keys()].filter(id => local.has(id) && remote.has(id)));
+    const relativeOrder = map => [...map.keys()].filter(id => common.has(id));
+    const baseOrder = relativeOrder(base);
+    const localOrder = relativeOrder(local);
+    const remoteOrder = relativeOrder(remote);
+    const localMoved = !sameValue(localOrder, baseOrder);
+    const remoteMoved = !sameValue(remoteOrder, baseOrder);
+    const useRemoteOrder = localMoved !== remoteMoved ? remoteMoved : preferRemote;
+    const primary = useRemoteOrder ? remoteValues : localValues;
+    const secondary = useRemoteOrder ? localValues : remoteValues;
     const items = [];
-    let conflict = false;
+    let conflict = localMoved && remoteMoved && !sameValue(localOrder, remoteOrder);
     entityOrder(primary, secondary, baseValues).forEach(id => {
       const merged = mergeEntity(
         base.has(id) ? base.get(id) : MISSING,

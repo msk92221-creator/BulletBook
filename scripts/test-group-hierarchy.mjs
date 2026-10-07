@@ -105,4 +105,14 @@ assert.deepEqual(
 const stable = JSON.stringify(value);
 assert.equal(context.repairLegacyCalendarGroupHierarchy(value), false);
 assert.equal(JSON.stringify(value), stable);
+
+// Once repaired, user layout is authoritative, including deliberately ungrouped
+// dated pages and custom group names/parents. Reopening must not "repair" it again.
+value.pages.find(page => page.id === "daily").groupId = null;
+value.pages = [value.pages[0], value.pages.find(page => page.id === "daily"),
+  ...value.pages.filter(page => page.id !== "cover" && page.id !== "daily")];
+value.groups.find(group => group.kind === "month").name = "내가 정한 순서";
+const arranged = JSON.stringify(value);
+assert.equal(context.repairLegacyCalendarGroupHierarchy(value), false);
+assert.equal(JSON.stringify(value), arranged);
 console.log("Legacy calendar group hierarchy repair: ok");
