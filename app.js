@@ -1341,6 +1341,9 @@
   // 페이지의 날짜 메타데이터를 기준으로 연→월→주 계층을 결정적으로 복구하고,
   // 동일 주차 그룹은 하나로 합친다. 페이지와 기록 자체는 삭제하지 않는다.
   function repairLegacyCalendarGroupHierarchy(value) {
+    // 한 번 복구한 뒤에는 사용자가 날짜 페이지를 다른 그룹/표지 아래로
+    // 옮긴 배치가 원본이다. 재실행·동기화 때 자동 날짜 그룹으로 돌리지 않는다.
+    if (Number(value.calendarGroupHierarchyVersion) >= 1) return false;
     const before = JSON.stringify({
       version: value.calendarGroupHierarchyVersion || 0,
       groups: value.groups,
@@ -1688,6 +1691,8 @@
   // 위젯에도 반복 일정이 반영된다. V2에서는 명시 calendarEvents만 사용한다.
   let lastWidgetSnapshotJson = "";
   let widgetNativeSequence = 0;
+  let widgetSyncTimer = null;
+  let widgetSnapshotGeneration = 0;
 
   function addCalendarWidgetItem(days, date, status, item) {
     if (!date) return;
@@ -1704,9 +1709,22 @@
     }
   }
 
-  function buildCalendarWidgetSnapshot() {
+  async function buildCalendarWidgetSnapshot(isCurrent = () => true) {
     const days = {};
     const representedMissionDates = new Set();
+    const completionDates = new Map();
+    const completionCounts = new Map();
+    const completionCount = (missionId, start, end) => {
+      const key = `${missionId}|${start}|${end}`;
+      if (!completionCounts.has(key)) {
+        if (!completionDates.has(missionId)) {
+          completionDates.set(missionId, completedMissionElements(missionId).map(record => record.date));
+        }
+        completionCounts.set(key, completionDates.get(missionId)
+          .filter(date => date && date >= start && date <= end).length);
+      }
+      return completionCounts.get(key);
+    };
     for (const event of book.calendarEvents || []) {
       const date = String(event?.date || "");
       if (!date) continue;
@@ -1723,9 +1741,15 @@
     const today = new Date();
     const projectionStart = new Date(today.getFullYear() - 1, 0, 1);
     const projectionEnd = new Date(today.getFullYear() + 2, 11, 31);
+    let projectedDays = 0;
     for (let date = projectionStart; date <= projectionEnd; date = offsetDate(date, 1)) {
+      // 위젯을 위한 4년치 반복 일정 계산이 화면 이동·입력을 막지 않게 나눈다.
+      if (projectedDays++ % 14 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        if (!isCurrent()) return null;
+      }
       const dateValue = isoDate(date);
-      for (const mission of missionsDueOn(date)) {
+      for (const mission of missionsDueOn(date, completionCount)) {
         const missionKey = `${dateValue}|${mission.id}`;
         if (representedMissionDates.has(missionKey)) continue;
         representedMissionDates.add(missionKey);
@@ -1739,17 +1763,27 @@
     if (!isAndroidApp) return;
     const native = window.BulletBookNative;
     if (!native?.pushCalendarWidget) return;
-    const snapshot = buildCalendarWidgetSnapshot();
-    const stableJson = JSON.stringify(snapshot);
-    if (stableJson === lastWidgetSnapshotJson) return; // 내용이 같으면 위젯을 다시 그리지 않는다.
-    lastWidgetSnapshotJson = stableJson;
-    const json = JSON.stringify({ ...snapshot, updatedAt: new Date().toISOString() });
-    const requestId = `widget-${Date.now()}-${++widgetNativeSequence}`;
-    try {
-      native.pushCalendarWidget(requestId, json);
-    } catch {
-      // 위젯 동기화 실패가 앱 본 기능을 방해하지 않도록 조용히 넘긴다.
-    }
+    const generation = ++widgetSnapshotGeneration;
+    clearTimeout(widgetSyncTimer);
+    widgetSyncTimer = setTimeout(async () => {
+      widgetSyncTimer = null;
+      const sourceBook = book;
+      const revision = saveRevision;
+      const isCurrent = () => generation === widgetSnapshotGeneration &&
+        book === sourceBook && revision === saveRevision;
+      try {
+        const snapshot = await buildCalendarWidgetSnapshot(isCurrent);
+        if (!snapshot || !isCurrent()) return;
+        const stableJson = JSON.stringify(snapshot);
+        if (stableJson === lastWidgetSnapshotJson) return;
+        const json = JSON.stringify({ ...snapshot, updatedAt: new Date().toISOString() });
+        const requestId = `widget-${Date.now()}-${++widgetNativeSequence}`;
+        native.pushCalendarWidget(requestId, json);
+        lastWidgetSnapshotJson = stableJson;
+      } catch {
+        // 위젯 동기화 실패가 앱 본 기능을 방해하지 않도록 조용히 넘긴다.
+      }
+    }, 250);
   }
 
   // 일정을 칸 안에 놓을 때 쓰는 지오메트리. mobileWriteTargetsForPage의 같은
@@ -2432,7 +2466,7 @@
     return true;
   }
 
-  function missionRunsOnDate(mission, date) {
+  function missionRunsOnDate(mission, date, completionCount = missionCompletionCount) {
     const goal = goalForMission(mission);
     if (!mission?.active || !goal || goal.status !== "active") return false;
     const day = date.getDay();
@@ -2445,7 +2479,7 @@
     if (mission.schedule === "custom") return mission.weekdays.includes(day);
     if (mission.schedule === "weekly") {
       const { start, end } = weekRangeFor(date);
-      return missionCompletionCount(mission.id, start, end) < mission.weeklyTarget;
+      return completionCount(mission.id, start, end) < mission.weeklyTarget;
     }
     if (mission.schedule === "monthly-date") {
       return date.getDate() === mission.monthDay;
@@ -2483,10 +2517,10 @@
     return true;
   }
 
-  function missionsDueOn(date) {
+  function missionsDueOn(date, completionCount = missionCompletionCount) {
     const seen = new Set();
     return currentGoalSystem().missions.filter(mission => {
-      if (!missionRunsOnDate(mission, date)) return false;
+      if (!missionRunsOnDate(mission, date, completionCount)) return false;
       const signature = missionDuplicateSignature(mission);
       if (seen.has(signature)) return false;
       seen.add(signature);
@@ -9550,7 +9584,8 @@
     bindEvents();
     try {
       const saved = await loadSavedBook();
-      book = normalizeBook(saved || book);
+      // loadSavedBook()에서 검증·정규화한 책을 다시 전체 변환하지 않는다.
+      book = saved || normalizeBook(book);
     } catch (error) {
       console.error("저장 문서 복구 실패", error);
       book = normalizeBook(createDefaultBook());
@@ -9564,6 +9599,15 @@
     updateViewModeControls();
     renderAll();
     if (calendarGroupsRepaired || calendarSetupAdded || missionsMaterialized) markDirty();
+    if (!localStorage.getItem(WELCOME_KEY)) refs.welcome.showModal();
+    // 로컬 문서가 준비되면 즉시 위젯 날짜/월로 이동한다. OneDrive 응답이나
+    // 여러 해의 위젯 요약 계산이 글쓰기 화면 진입을 막아서는 안 된다.
+    const native = window.BulletBookNative;
+    if (native?.readyForWidgetNavigation) {
+      const reqId = `widget-ready-${Date.now()}`;
+      try { native.readyForWidgetNavigation(reqId); } catch { /* ignore */ }
+    }
+    syncCalendarWidget();
     try {
       cloudSync = window.BulletBookCloudSync?.create({
         getBook: () => clone(book),
@@ -9586,15 +9630,6 @@
     } catch (error) {
       console.error("동기화 복구 실패", error);
       updateCloudState("error", "동기화 복구 실패 · 기기 문서를 표시합니다");
-    }
-    if (!localStorage.getItem(WELCOME_KEY)) refs.welcome.showModal();
-    // 앱 초기화 완료 후 위젯에 현재 일정을 반영하고,
-    // cold start로 보관된 위젯 deep-link가 있으면 native에서 전달하게 한다.
-    syncCalendarWidget();
-    const native = window.BulletBookNative;
-    if (native?.readyForWidgetNavigation) {
-      const reqId = `widget-ready-${Date.now()}`;
-      try { native.readyForWidgetNavigation(reqId); } catch { /* ignore */ }
     }
   }
 

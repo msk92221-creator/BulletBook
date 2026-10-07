@@ -293,4 +293,43 @@ const book = (updatedAt, pages) => ({
   );
 }
 
+{
+  const base = book("2026-08-03T01:00:00.000Z", [
+    page("cover", "표지"), page("a", "A"), page("b", "B"), page("c", "C"),
+  ]);
+  base.groups = [{ id: "g1", name: "1" }, { id: "g2", name: "2" }];
+  const local = structuredClone(base);
+  local.pages = [local.pages[0], local.pages[2], local.pages[1], local.pages[3]];
+  local.groups.reverse();
+  local.updatedAt = "2026-08-03T01:01:00.000Z";
+  const remote = structuredClone(base);
+  remote.pages[1].title = "newer text, unchanged order";
+  remote.updatedAt = "2026-08-03T01:02:00.000Z";
+  const merged = mergeBooks(base, local, remote);
+  assert.deepEqual(Array.from(merged.book.pages, item => item.id), ["cover", "b", "a", "c"]);
+  assert.deepEqual(Array.from(merged.book.groups, item => item.id), ["g2", "g1"]);
+  assert.equal(merged.book.pages.find(item => item.id === "a").title, remote.pages[1].title);
+  assert.equal(merged.hadConflict, false);
+  const reverse = mergeBooks(base, remote, local);
+  assert.equal(bookContentSignature(merged.book), bookContentSignature(reverse.book));
+
+  // A page added only on the older device stays between its neighbors.
+  local.pages.splice(3, 0, page("inserted", "추가"));
+  const inserted = mergeBooks(base, local, remote);
+  assert.deepEqual(Array.from(inserted.book.pages, item => item.id),
+    ["cover", "b", "a", "inserted", "c"]);
+  const plainLocal = structuredClone(base);
+  plainLocal.pages.splice(2, 0, page("middle", "중간"));
+  assert.deepEqual(Array.from(mergeBooks(base, plainLocal, remote).book.pages, item => item.id),
+    ["cover", "a", "middle", "b", "c"]);
+  plainLocal.pages.splice(2, 0, page("middle", "중복 ID"));
+  assert.deepEqual(Array.from(mergeBooks(base, plainLocal, remote).book.pages, item => item.id),
+    ["cover", "a", "middle", "b", "c"]);
+
+  // Competing manual reorders are reported as a conflict, with both originals
+  // retained by the existing recovery-snapshot flow.
+  remote.pages = [remote.pages[0], remote.pages[3], remote.pages[1], remote.pages[2]];
+  assert.equal(mergeBooks(base, local, remote).hadConflict, true);
+}
+
 console.log("cloud three-way merge: ok");
