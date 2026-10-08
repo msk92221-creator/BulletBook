@@ -2222,20 +2222,14 @@
       if (value !== null && !match) showToast("예: 2026-08 형식으로 입력해 주세요");
       else if (match) changed = setMonthlyPageDate(page, Number(match[1]), Number(match[2]));
     } else if (action === "weekly") {
-      const value = prompt(
-        "이 주에 포함된 날짜를 YYYY-MM-DD로 입력하세요. 월요일로 자동 맞춥니다.",
+      const value = promptIsoDate(
+        "이 주에 포함된 날짜를 입력하세요. 월요일로 자동 맞춥니다.",
         normalizedWeekStart(page.weekStart) || isoDate(new Date())
       );
-      if (value !== null) changed = setWeeklyPageDate(page, value.trim());
-      if (value !== null && !changed && !normalizedDateOrBlank(value.trim())) {
-        showToast("예: 2026-08-03 형식으로 입력해 주세요");
-      }
+      if (value) changed = setWeeklyPageDate(page, value);
     } else if (action === "daily") {
-      const value = prompt("일간 계획 날짜를 YYYY-MM-DD로 입력하세요", page.pageDate || isoDate(new Date()));
-      if (value !== null) changed = setDailyPageDate(page, value.trim());
-      if (value !== null && !changed && !normalizedDateOrBlank(value.trim())) {
-        showToast("예: 2026-08-03 형식으로 입력해 주세요");
-      }
+      const value = promptIsoDate("일간 계획 날짜를 입력하세요", page.pageDate || isoDate(new Date()));
+      if (value) changed = setDailyPageDate(page, value);
     }
     if (!changed) return;
     commitHistory();
@@ -7816,10 +7810,11 @@
   }
 
   function promptIsoDate(message, initial = isoDate(new Date())) {
-    const value = prompt(message, initial);
+    const value = prompt(`${message}\nYYYYMMDD (예: 20261009)`, initial.replace(/-/g, ""));
     if (value === null) return null;
-    const date = normalizedDateOrBlank(value.trim());
-    if (!date) showToast("예: 2026-08-03 형식으로 입력해 주세요");
+    const text = value.trim().replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
+    const date = normalizedDateOrBlank(text);
+    if (!date) showToast("올바른 날짜를 8자리로 입력해 주세요. 예: 20261009");
     return date || null;
   }
 
