@@ -2898,7 +2898,7 @@
       item.dataset.pageId = page.id;
       item.dataset.groupId = page.groupId || "";
       item.dataset.groupPath = groupPathForId(page.groupId).map(group => group.id).join(" ");
-      item.style.setProperty("--group-indent", `${Math.max(0, depth - 1) * 12}px`);
+      item.style.setProperty("--group-indent", `calc(${depth} * var(--page-tree-step))`);
       const displayTitle = pageDisplayTitle(page);
       item.innerHTML = `
         <input class="page-select-checkbox" type="checkbox"
@@ -2975,7 +2975,7 @@
       header.className = "page-group-header";
       header.dataset.groupId = group.id;
       header.dataset.groupPath = path.map(item => item.id).join(" ");
-      header.style.setProperty("--group-indent", `${depth * 12}px`);
+      header.style.setProperty("--group-indent", `calc(${depth} * var(--page-tree-step))`);
       header.title = "드래그해 순서를 바꾸거나 다른 그룹 제목·페이지에 놓아 하위 그룹으로 이동";
       header.innerHTML = `<button type="button" class="group-toggle" aria-expanded="${!collapsed}">
           <span class="group-chevron">${collapsed ? "›" : "⌄"}</span>
@@ -3032,7 +3032,8 @@
       );
     };
     (childrenByParent.get("") || []).forEach(group => appendMissingTree(group));
-    book.groups.filter(group => !renderedGroups.has(group.id))
+    book.groups.filter(group => !renderedGroups.has(group.id) &&
+      !groupPathForId(group.id).slice(0, -1).some(parent => collapsedGroups.has(parent.id)))
       .forEach(group => appendMissingTree(group, groupPathForId(group.id).length - 1));
     const topDropZone = document.createElement("div");
     topDropZone.className = "page-list-top-drop-zone";
