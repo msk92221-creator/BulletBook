@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">BulletBook</string>
-    <string name="title_activity_main">BulletBook</string>
-    <string name="package_name">kr.co.bulletbook.app</string>
-    <string name="custom_url_scheme">kr.co.bulletbook.app</string>
-    <string name="widget_calendar_description">이번 달 불렛북 일정 달력</string>
+    <string name="app_name">BulletBook 새버전</string>
+    <string name="title_activity_main">BulletBook 새버전</string>
+    <string name="package_name">kr.co.bulletbook.next</string>
+    <string name="custom_url_scheme">kr.co.bulletbook.next</string>
+    <string name="widget_calendar_description">BulletBook 새버전의 이번 달 일정 달력</string>
 </resources>

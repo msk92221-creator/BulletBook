@@ -1,11 +1,11 @@
 apply plugin: 'com.android.application'
 
-// 버전 폴더마다 새로 풀리는 android/ 트리 밖, BulletBooks/keystore/에 실제 키를
-// 고정해 둔다. 그래야 다음 버전에서도 같은 서명으로 빌드되어 기기에서
-// 재설치 없이 업데이트로 설치된다. 이 파일이 없으면(=옮기기 전) release도
-// 서명 없이 빌드되어 debug와 동일하게 동작한다.
-def keystorePropertiesFile = rootProject.file('../../keystore/keystore.properties')
-def keystoreFile = rootProject.file('../../keystore/bulletbook-release.jks')
+// 서명 키는 저장소 밖에 보관한다. 새 설치 계열은 별도 키 경로를 사용해
+// 이전 앱의 키를 잘못 재사용하지 않는다. 키가 없으면 release는 미서명이다.
+def signingDirectory = System.getenv('BULLETBOOK_KEYSTORE_DIR')
+    ?: new File(System.getProperty('user.home'), 'bulletbook-release-signing').absolutePath
+def keystorePropertiesFile = new File(signingDirectory, 'keystore.properties')
+def keystoreFile = new File(signingDirectory, 'bulletbook-release.jks')
 def keystoreProperties = new Properties()
 def hasReleaseKeystore = keystorePropertiesFile.exists() && keystoreFile.exists()
 if (hasReleaseKeystore) {
@@ -19,7 +19,7 @@ android {
     }
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "kr.co.bulletbook.app"
+        applicationId "kr.co.bulletbook.next"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 101
