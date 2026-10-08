@@ -326,7 +326,6 @@
     mobileSearchResults: $("#mobileSearchResults"),
     mobileSearchCloseButton: $("#mobileSearchCloseButton"),
     mobileMoreButton: $("#mobileMoreButton"),
-    mobileMoreNavButton: $("#mobileMoreNavButton"),
     mobileMoreDialog: $("#mobileMoreDialog"),
     mobileMoreCloseButton: $("#mobileMoreCloseButton"),
     mobileAdvancedToggle: $("#mobileAdvancedToggle"),
@@ -2836,6 +2835,7 @@
 
   function renderAll() {
     renderPageList();
+    renderNotebookSearch();
     renderSpread();
     updateStatus();
     if (refs.goalHubDialog?.open) renderGoalHub();
@@ -6371,11 +6371,12 @@
       selected?.placeholder || "현재 페이지에 기록할 내용을 입력하세요";
     refs.mobilePageWriteSubmit.textContent =
       selected?.submitLabel || "현재 페이지에 추가";
+    $("#mobileWritePlacementLabel").textContent = `${displayTitle} · ${selected?.label || "내용"}`;
     const widgetDateHint = mobileWriteDateContext
       ? `위젯에서 선택한 ${dailyDateLabel(dateFromIso(mobileWriteDateContext))}입니다. ○ 일정은 이 날짜에 저장됩니다. `
       : "";
     refs.mobilePageWriteHint.textContent =
-      `${widgetDateHint}${selected?.hint || "다음 빈 줄"}에 자동 배치됩니다. 추가한 기록과 템플릿의 제목·날짜·항목명은 두 번 터치하면 편집됩니다. 기록은 한 번 터치해 크기 조절, 드래그해 모눈 단위 이동, 길게 눌러 수정·삭제할 수 있습니다.`;
+      `${widgetDateHint}${selected?.hint || "다음 빈 줄"}에 추가합니다. 기록을 두 번 누르면 수정할 수 있습니다.`;
     updateMobileWriteSymbolButtons();
   }
 
@@ -6387,6 +6388,7 @@
     refs.mobileWriteOnceFields.hidden = mobileWriteMode === "routine";
     refs.mobileWriteRoutineFields.hidden = mobileWriteMode !== "routine";
     if (mobileWriteMode === "routine") {
+      $("#mobileWritePlacementLabel").textContent = "반복 루틴";
       refs.mobilePageWriteContentLabel.textContent = "루틴 이름";
       refs.mobilePageWriteInput.placeholder = "예: 만 보 걷기";
       refs.mobilePageWriteSubmit.textContent = "루틴 만들기";
@@ -6403,6 +6405,7 @@
 
   function openMobilePageWrite(options = {}) {
     mobileWriteDateContext = normalizedDateOrBlank(options?.date);
+    $("#mobileWritePlacement").open = false;
     const indexes = visibleIndexes();
     refs.mobilePageWritePageSelect.innerHTML = indexes.map(index => {
       const page = book.pages[index];
@@ -6960,6 +6963,151 @@
     showToast("텍스트 박스를 삭제했습니다");
   }
 
+  let notebookCalendarDate = isoDate(new Date());
+
+  function notebookPageMatches(page, query) {
+    const path = groupPathForId(page.groupId).map(group => group.name).join(" ");
+    return `${pageDisplayTitle(page)} ${path} ${page.pageDate || ""} ${(page.pageDate || "").replaceAll("-", "")}`
+      .toLocaleLowerCase("ko-KR").includes(query.trim().toLocaleLowerCase("ko-KR"));
+  }
+
+  function renderNotebookSearch() {
+    const input = $("#notebookSearchInput");
+    if (!input) return;
+    const query = input.value.trim();
+    const results = $("#notebookSearchResults");
+    refs.sidebar.dataset.searching = String(Boolean(query));
+    results.hidden = !query;
+    results.replaceChildren();
+    if (!query) return;
+    const matches = book.pages.filter(page => notebookPageMatches(page, query));
+    matches.forEach(page => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "mobile-search-result";
+      row.innerHTML = `<strong>${escapeHtml(pageDisplayTitle(page))}</strong><span>${escapeHtml(groupPathForId(page.groupId).map(group => group.name).join(" › ") || "그룹 없음")}</span>`;
+      row.addEventListener("click", () => { navigateToBookPage(page); closeSidebar(); });
+      results.append(row);
+    });
+    if (!matches.length) {
+      results.innerHTML = '<p class="notebook-empty">찾는 페이지가 없습니다. 페이지 이름이나 연도·월을 입력해 보세요.</p>';
+    }
+  }
+
+  function setNotebookPanel(panel) {
+    refs.sidebar.dataset.panel = ["pages", "add", "manage"].includes(panel) ? panel : "pages";
+    $$('[data-notebook-panel]').forEach(button =>
+      button.setAttribute("aria-pressed", String(button.dataset.notebookPanel === refs.sidebar.dataset.panel))
+    );
+    if (panel === "pages") renderNotebookSearch();
+  }
+
+  function updateNotebookContext() {
+    const page = book.pages.find(item => item.id === activePageId) || book.pages[currentIndex];
+    if (!page) return;
+    $("#notebookPageTitle").textContent = pageDisplayTitle(page);
+    $("#notebookPath").textContent = groupPathForId(page.groupId).map(group => group.name).join(" › ") || "내 노트";
+    const calendarOpen = $("#notebookCalendarDialog").open;
+    const notesOpen = refs.sidebar.classList.contains("open");
+    const todayOpen = !calendarOpen && !notesOpen && page.type === "daily" && page.pageDate === isoDate(new Date());
+    [[refs.mobileTodayButton, todayOpen], [$("#notebookCalendarButton"), calendarOpen],
+      [refs.mobilePagesButton, !calendarOpen && !todayOpen]].forEach(([button, active]) => {
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+  }
+
+  function shiftNotebookMonth(value, delta) {
+    const date = dateFromIso(value);
+    const first = new Date(date.getFullYear(), date.getMonth() + delta, 1);
+    const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    first.setDate(Math.min(date.getDate(), lastDay));
+    return isoDate(first);
+  }
+
+  function renderNotebookCalendar() {
+    const date = dateFromIso(notebookCalendarDate);
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    $("#notebookMonthLabel").textContent = `${year}년 ${month + 1}월`;
+    const grid = $("#notebookCalendarDays");
+    grid.replaceChildren();
+    const firstOffset = (new Date(year, month, 1).getDay() + 6) % 7;
+    const count = new Date(year, month + 1, 0).getDate();
+    const occupied = new Set((book.calendarEvents || []).map(event => event.date));
+    book.pages.forEach(page => { if (page.pageDate) occupied.add(page.pageDate); });
+    for (let i = 0; i < firstOffset; i += 1) grid.append(document.createElement("span"));
+    for (let day = 1; day <= count; day += 1) {
+      const value = isoDate(new Date(year, month, day));
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = String(day);
+      button.setAttribute("aria-label", `${month + 1}월 ${day}일${occupied.has(value) ? " · 기록 있음" : ""}`);
+      button.setAttribute("aria-pressed", String(value === notebookCalendarDate));
+      button.classList.toggle("has-record", occupied.has(value));
+      if (value === isoDate(new Date())) button.setAttribute("aria-current", "date");
+      button.addEventListener("click", () => { notebookCalendarDate = value; renderNotebookCalendar(); });
+      grid.append(button);
+    }
+    $("#notebookCalendarDate").textContent = dailyDateLabel(date);
+    const events = calendarEventsForDate(notebookCalendarDate);
+    $("#notebookCalendarEvents").innerHTML = events.length
+      ? events.map(event => `<p>${escapeHtml(event.status === "completed" ? "×" : "○")} ${escapeHtml(event.title)}</p>`).join("")
+      : '<p class="notebook-empty">등록된 일정이 없습니다.</p>';
+    const dailyExists = book.pages.some(page => page.type === "daily" && page.pageDate === notebookCalendarDate);
+    $("#notebookCalendarOpen").textContent = dailyExists ? "일간 페이지 열기" : "일간 페이지 만들기";
+  }
+
+  function wireNotebookNavigation() {
+    refs.sidebar.inert = isAndroidApp;
+    refs.spread.addEventListener("pointerdown", () => requestAnimationFrame(updateNotebookContext), true);
+    $("#notebookLocation").addEventListener("click", toggleSidebar);
+    $("#notebookSearchInput").addEventListener("input", renderNotebookSearch);
+    $$('[data-notebook-panel]').forEach(button =>
+      button.addEventListener("click", () => setNotebookPanel(button.dataset.notebookPanel))
+    );
+    const dialog = $("#notebookCalendarDialog");
+    $("#notebookCalendarButton").addEventListener("click", () => {
+      closeSidebar();
+      const page = book.pages.find(item => item.id === activePageId);
+      notebookCalendarDate = normalizedDateOrBlank(page?.pageDate) || isoDate(new Date());
+      renderNotebookCalendar();
+      if (!dialog.open) dialog.showModal();
+      updateNotebookContext();
+    });
+    $("#notebookCalendarClose").addEventListener("click", () => dialog.close());
+    dialog.addEventListener("close", updateNotebookContext);
+    [["#notebookMonthPrev", -1], ["#notebookMonthNext", 1]].forEach(([id, delta]) => {
+      $(id).addEventListener("click", () => {
+        notebookCalendarDate = shiftNotebookMonth(notebookCalendarDate, delta);
+        renderNotebookCalendar();
+      });
+    });
+    $("#notebookCalendarToday").addEventListener("click", () => {
+      notebookCalendarDate = isoDate(new Date());
+      renderNotebookCalendar();
+    });
+    $("#notebookCalendarOpen").addEventListener("click", () => {
+      const daily = ensureDailyPage(dateFromIso(notebookCalendarDate));
+      if (daily.created) commitHistory();
+      dialog.close();
+      navigateToBookPage(daily.page);
+    });
+    $("#notebookCalendarWrite").addEventListener("click", () => openCalendarEventEditor(notebookCalendarDate));
+    refs.calendarEventDialog.addEventListener("close", () => {
+      if (dialog.open) renderNotebookCalendar();
+    });
+    $("#mobileAccountButton").addEventListener("click", () => {
+      refs.mobileMoreDialog.close();
+      refs.cloudFileButton.click();
+    });
+    $("#mobileImportButton").addEventListener("click", () => {
+      refs.mobileMoreDialog.close();
+      refs.importInput.click();
+    });
+  }
+
   function openMobileSearch() {
     refs.mobileSearchInput.value = "";
     renderMobileSearchResults();
@@ -6980,9 +7128,10 @@
       row.type = "button";
       row.className = "mobile-search-result";
       row.innerHTML = `<strong>${escapeHtml(entry.content)}</strong>
-        <span>${escapeHtml(entry.pageTitle)}${entry.pageDate ? ` · ${escapeHtml(entry.pageDate)}` : ""}</span>`;
+        <span>${escapeHtml(entry.groupName || "그룹 없음")} › ${escapeHtml(entry.pageTitle)}${entry.pageDate ? ` · ${escapeHtml(entry.pageDate)}` : ""}</span>`;
       row.addEventListener("click", () => {
         refs.mobileSearchDialog.close();
+        closeSidebar();
         currentIndex = entry.pageIndex;
         activePageId = entry.pageId;
         selection = entry.elementId && advancedMobileEditing
@@ -8197,6 +8346,7 @@
   }
 
   function updateStatus() {
+    updateNotebookContext();
     const indexes = visibleIndexes();
     refs.pageStatus.textContent = indexes.length === 2
       ? `${indexes[0] + 1}–${indexes[1] + 1} / ${book.pages.length}`
@@ -8835,14 +8985,20 @@
   }
 
   function openSidebar() {
+    refs.sidebar.inert = false;
+    $("#notebookSearchInput").value = "";
+    setNotebookPanel("pages");
     refs.sidebar.classList.add("open");
     refs.sidebarScrim.classList.add("open");
+    updateNotebookContext();
     requestAnimationFrame(fitPageListHeightToSidebar);
   }
 
   function closeSidebar() {
+    refs.sidebar.inert = isAndroidApp;
     refs.sidebar.classList.remove("open");
     refs.sidebarScrim.classList.remove("open");
+    updateNotebookContext();
   }
 
   function toggleSidebar() {
@@ -8877,6 +9033,10 @@
     }
     if (refs.recoveryDialog.open) {
       refs.recoveryDialog.close();
+      return true;
+    }
+    if ($("#notebookCalendarDialog").open) {
+      $("#notebookCalendarDialog").close();
       return true;
     }
     if (refs.mobileMoreDialog.open) {
@@ -8925,6 +9085,10 @@
       error: "동기화 오류",
     };
     refs.cloudLabel.textContent = labels[state] || "동기화";
+    $("#mobileSyncLabel").textContent = state === "disconnected" ? "계정 연결 안 됨" : labels[state] || "동기화";
+    $("#mobileSyncDetail").textContent = detail;
+    refs.mobileMoreButton.dataset.syncState = state;
+    refs.mobileMoreButton.title = `설정 및 동기화 · ${detail}`;
     refs.cloudButton.title = detail;
     refs.cloudDisconnectButton.hidden = state === "disconnected";
   }
@@ -9171,7 +9335,8 @@
       commitHistory();
       renderAll();
     });
-    refs.mobileTodayButton.addEventListener("click", goToToday);
+    wireNotebookNavigation();
+    refs.mobileTodayButton.addEventListener("click", () => { closeSidebar(); goToToday(); });
     refs.mobilePageWriteButton.addEventListener("click", openMobilePageWrite);
     refs.mobilePageWriteCloseButton.addEventListener("click", () => refs.mobilePageWriteDialog.close());
     refs.mobilePageWritePageSelect.addEventListener("change", () => {
@@ -9252,7 +9417,6 @@
     refs.mobileSearchInput.addEventListener("input", renderMobileSearchResults);
     refs.mobileSearchCloseButton.addEventListener("click", () => refs.mobileSearchDialog.close());
     refs.mobileMoreButton.addEventListener("click", () => refs.mobileMoreDialog.showModal());
-    refs.mobileMoreNavButton.addEventListener("click", () => refs.mobileMoreDialog.showModal());
     refs.mobileMoreCloseButton.addEventListener("click", () => refs.mobileMoreDialog.close());
     refs.mobileAdvancedToggle.addEventListener("click", toggleMobileAdvancedEditing);
     refs.mobileSyncButton.addEventListener("click", () => {

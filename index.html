@@ -19,7 +19,8 @@
           <div class="save-state"><span id="saveDot"></span><span id="saveState">저장됨</span></div>
         </div>
       </div>
-      <button type="button" id="mobileMoreButton" class="icon-button mobile-app-only" title="더보기">⋮</button>
+      <button type="button" id="mobileSearchButton" class="icon-button mobile-app-only" aria-label="기록 검색" title="기록 검색"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
+      <button type="button" id="mobileMoreButton" class="icon-button mobile-app-only" aria-label="설정 및 동기화" title="설정 및 동기화"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7m4 0h7M3 17h3m4 0h11"/><circle cx="12" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></button>
       <div class="top-actions">
         <div class="view-switch" role="group" aria-label="페이지 보기 방식">
           <button type="button" data-view="single" title="한 쪽 보기">1쪽</button>
@@ -38,18 +39,25 @@
       </div>
     </header>
 
-    <aside id="sidebar" class="sidebar">
+    <aside id="sidebar" class="sidebar" data-panel="pages">
       <div class="sidebar-section sidebar-header">
         <div>
           <p class="eyebrow">BOOK</p>
-          <h2>페이지</h2>
+          <h2>내 노트</h2>
         </div>
         <div class="sidebar-header-actions">
           <button type="button" id="addGroupButton" class="small-icon-button" title="페이지 그룹 추가">＋그룹</button>
-          <button type="button" id="closeSidebar" class="icon-button mobile-only">×</button>
+          <button type="button" id="closeSidebar" class="icon-button mobile-only" aria-label="내 노트 닫기">×</button>
         </div>
       </div>
 
+      <div class="notebook-tabs mobile-app-only" role="group" aria-label="내 노트 메뉴">
+        <button type="button" data-notebook-panel="pages" aria-pressed="true">페이지</button>
+        <button type="button" data-notebook-panel="add" aria-pressed="false">＋ 페이지 추가</button>
+        <button type="button" data-notebook-panel="manage" aria-pressed="false">관리</button>
+      </div>
+      <label class="notebook-search"><span class="sr-only">페이지 이름이나 그룹으로 찾기</span><input id="notebookSearchInput" type="search" placeholder="페이지 이름·연도·월로 찾기" autocomplete="off"></label>
+      <div id="notebookSearchResults" class="notebook-search-results" hidden></div>
       <nav id="pageList" class="page-list" aria-label="페이지 목록"></nav>
       <div id="selectedPageActions" class="selected-page-actions" hidden>
         <span><strong id="selectedPageCount">0</strong>쪽 선택</span>
@@ -112,6 +120,10 @@
     </aside>
 
     <main class="workspace">
+      <div class="notebook-context mobile-app-only">
+        <button type="button" id="notebookLocation" class="notebook-location" title="현재 페이지 위치 · 내 노트 열기"><small id="notebookPath"></small><strong id="notebookPageTitle">현재 페이지</strong></button>
+        <button type="button" id="mobilePageWriteButton" class="primary-button notebook-write">＋ 기록</button>
+      </div>
       <section class="toolstrip" aria-label="편집 도구">
         <button type="button" data-tool="select" class="tool active" title="선택 도구"><span class="tool-icon">↖</span><small>선택</small></button>
         <button type="button" data-tool="text" class="tool" title="텍스트 박스 (T) · 빈 곳을 드래그해 생성"><span class="tool-icon">T</span><small>글자</small></button>
@@ -238,10 +250,11 @@
 
   <dialog id="mobileMoreDialog" class="mobile-more-dialog">
     <header class="sheet-header">
-      <div><p class="eyebrow">MORE</p><h2>더보기</h2></div>
+      <div><p class="eyebrow">BULLETBOOK</p><h2>설정 및 동기화</h2></div>
       <button type="button" id="mobileMoreCloseButton" class="icon-button" aria-label="닫기">×</button>
     </header>
     <div class="mobile-more-content">
+      <section class="mobile-sync-summary" aria-label="OneDrive 동기화 상태"><strong id="mobileSyncLabel">계정 연결 안 됨</strong><p id="mobileSyncDetail">Microsoft 계정을 연결하면 OneDrive와 동기화할 수 있습니다.</p></section>
       <section class="mobile-view-setting" aria-label="페이지 보기 방식">
         <div>
           <strong>페이지 보기</strong>
@@ -263,6 +276,8 @@
         <h3 id="mobileMoreSyncTitle" class="mobile-more-section-title">동기화·백업</h3>
         <div class="mobile-more-actions">
           <button type="button" id="mobileSyncButton" class="mobile-menu-action">지금 동기화</button>
+          <button type="button" id="mobileAccountButton" class="mobile-menu-action">Microsoft 계정 연결/변경</button>
+          <button type="button" id="mobileImportButton" class="mobile-menu-action">백업 파일 복원</button>
           <button type="button" id="mobileExportButton" class="mobile-menu-action">불렛북 파일 저장</button>
           <button type="button" id="mobileRecoveryButton" class="mobile-menu-action">동기화 복구본</button>
         </div>
@@ -399,6 +414,18 @@
     </form>
   </dialog>
 
+  <dialog id="notebookCalendarDialog" class="notebook-calendar-dialog">
+    <header class="sheet-header"><div><p class="eyebrow">CALENDAR</p><h2>달력</h2></div><button type="button" id="notebookCalendarClose" class="icon-button" aria-label="달력 닫기">×</button></header>
+    <div class="notebook-calendar-body">
+      <div class="notebook-month"><button type="button" id="notebookMonthPrev" aria-label="이전 달">‹</button><h3 id="notebookMonthLabel"></h3><button type="button" id="notebookMonthNext" aria-label="다음 달">›</button><button type="button" id="notebookCalendarToday">오늘</button></div>
+      <div class="notebook-weekdays" aria-hidden="true"><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span><span>일</span></div>
+      <div id="notebookCalendarDays" class="notebook-calendar-days" role="group" aria-label="날짜 선택"></div>
+      <p class="notebook-calendar-legend">날짜 아래 점은 일정이나 일간 페이지가 있는 날입니다.</p>
+      <section class="notebook-agenda" aria-live="polite"><h3 id="notebookCalendarDate"></h3><div id="notebookCalendarEvents"></div></section>
+      <div class="notebook-calendar-actions"><button type="button" id="notebookCalendarOpen" class="quiet-button">일간 페이지 열기</button><button type="button" id="notebookCalendarWrite" class="primary-button">＋ 일정</button></div>
+    </div>
+  </dialog>
+
   <dialog id="mobilePageWriteDialog" class="mobile-page-write-dialog">
     <header class="sheet-header">
       <div><p id="mobilePageWriteEyebrow" class="eyebrow">PAGE WRITE</p><h2 id="mobilePageWriteTitle">현재 페이지에 쓰기</h2></div>
@@ -412,6 +439,22 @@
           <small id="mobilePageWriteContextDescription">페이지 형식에 맞는 칸을 골라 기록합니다.</small>
         </div>
       </div>
+      <label class="mobile-write-field">
+        <span id="mobilePageWriteContentLabel">내용</span>
+        <textarea id="mobilePageWriteInput" rows="4" placeholder="박스를 만들 필요 없이 내용만 입력하세요"></textarea>
+      </label>
+      <fieldset class="mobile-write-symbol-field">
+        <legend>불렛 종류</legend>
+        <div class="mobile-write-symbols">
+          <button type="button" data-mobile-write-symbol="•" class="active">• 할 일</button>
+          <button type="button" data-mobile-write-symbol="○">○ 일정</button>
+          <button type="button" data-mobile-write-symbol="−">− 메모</button>
+          <button type="button" data-mobile-write-symbol="+">+ 아이디어</button>
+        </div>
+      </fieldset>
+      <details id="mobileWritePlacement" class="mobile-write-placement">
+        <summary>기록 위치·반복 설정 <span id="mobileWritePlacementLabel"></span></summary>
+        <div class="mobile-write-placement-body">
       <button type="button" id="mobilePageWriteAddContinuationButton" class="quiet-button mobile-write-next-page-button">＋ 이 페이지와 같은 양식 추가</button>
       <div class="mobile-write-mode-switch" role="group" aria-label="쓰기 방식">
         <button type="button" data-write-mode="once" class="active">한 번 쓰기</button>
@@ -439,15 +482,6 @@
           <select id="mobilePageWriteDetailSelect"></select>
         </label>
       </div>
-      <fieldset class="mobile-write-symbol-field">
-        <legend>불렛 종류</legend>
-        <div class="mobile-write-symbols">
-          <button type="button" data-mobile-write-symbol="•" class="active">• 할 일</button>
-          <button type="button" data-mobile-write-symbol="○">○ 일정</button>
-          <button type="button" data-mobile-write-symbol="−">− 메모</button>
-          <button type="button" data-mobile-write-symbol="+">+ 아이디어</button>
-        </div>
-      </fieldset>
       <div id="mobileWriteRoutineFields" class="mobile-write-routine-fields" hidden>
         <button type="button" id="mobileWriteOpenRoutineListButton" class="quiet-button mobile-write-routine-list-button">↗ 만든 루틴 모두 보기·편집</button>
         <label class="mobile-write-field"><span>반복 방식</span>
@@ -489,10 +523,8 @@
           </div>
         </div>
       </div>
-      <label class="mobile-write-field">
-        <span id="mobilePageWriteContentLabel">내용</span>
-        <textarea id="mobilePageWriteInput" rows="4" placeholder="박스를 만들 필요 없이 내용만 입력하세요"></textarea>
-      </label>
+        </div>
+      </details>
       <p id="mobilePageWriteHint" class="mobile-write-hint"></p>
       <button id="mobilePageWriteSubmit" type="submit" class="primary-button mobile-write-submit">현재 페이지에 추가</button>
     </form>
@@ -549,11 +581,9 @@
   </dialog>
 
   <nav class="mobile-bottom-nav mobile-app-only" aria-label="모바일 메뉴">
-    <button type="button" id="mobileTodayButton"><span>◷</span><small>오늘</small></button>
-    <button type="button" id="mobilePageWriteButton" class="page-write-nav-button"><span>✎</span><small>현재 페이지 쓰기</small></button>
-    <button type="button" id="mobilePagesButton"><span>▤</span><small>페이지</small></button>
-    <button type="button" id="mobileSearchButton"><span>⌕</span><small>검색</small></button>
-    <button type="button" id="mobileMoreNavButton"><span>⋯</span><small>더보기</small></button>
+    <button type="button" id="mobileTodayButton"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg><small>오늘</small></button>
+    <button type="button" id="notebookCalendarButton"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16m-11 5h2m2 0h2"/></svg><small>달력</small></button>
+    <button type="button" id="mobilePagesButton"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v16M3 4h5a4 4 0 0 1 4 2 4 4 0 0 1 4-2h5v15h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3z"/></svg><small>내 노트</small></button>
   </nav>
 
   <script src="cloud-sync.js"></script>
