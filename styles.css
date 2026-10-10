@@ -2756,11 +2756,6 @@ body.resizing-page-list {
   line-height: 1.1;
   white-space: nowrap;
 }
-.mobile-bottom-nav .page-write-nav-button small { font-size: 0; }
-.mobile-bottom-nav .page-write-nav-button small::after {
-  content: "페이지 쓰기";
-  font-size: 10px;
-}
 .mobile-bottom-nav .page-write-nav-button > span {
   color: #214fbd;
   font-weight: 800;
@@ -3953,11 +3948,6 @@ textarea::placeholder {
 .notebook-empty { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .notebook-search-results .mobile-search-result { width: 100%; text-align: left; margin-bottom: 8px; }
 .mobile-search-result strong, .mobile-search-result span { overflow-wrap: anywhere; }
-.mobile-write-placement { border: 1px solid var(--line); border-radius: 12px; background: var(--surface, #fff); }
-.mobile-write-placement summary { cursor: pointer; padding: 13px; font-size: 13px; font-weight: 650; }
-.mobile-write-placement summary span { display: block; margin: 5px 0 0 16px; font-size: 12px; font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
-.mobile-write-placement-body { display: grid; gap: 14px; padding: 0 12px 12px; }
-.mobile-write-placement-body .mobile-write-next-page-button { order: 10; }
 .mobile-page-write-form > .mobile-write-field textarea { min-height: 108px; font-size: 16px; line-height: 1.55; }
 .mobile-write-submit { position: sticky; bottom: 0; z-index: 1; box-shadow: 0 -8px 12px var(--surface, #fff); }
 .mobile-write-context { padding: 9px 11px; }
@@ -3988,7 +3978,8 @@ textarea::placeholder {
 .android-app .book-title { width: 100%; font-size: 15px; }
 .android-app .brand > div { width: 100%; min-width: 0; }
 .android-app .save-state { display: flex; margin-top: 1px; font-size: 10px; }
-.android-app #mobileMoreButton { display: grid; }
+.android-app #mobileMoreButton { display: none; }
+.android-app #sidebarToggle { display: grid; width: 42px; min-width: 42px; height: 44px; place-items: center; font-size: 24px; }
 .android-app .topbar > .icon-button { width: 40px; height: 42px; flex: 0 0 40px; place-items: center; }
 .android-app .topbar svg, .mobile-bottom-nav svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .android-app #mobileMoreButton[data-sync-state="error"], .android-app #mobileMoreButton[data-sync-state="offline"] { color: #ffd8a0; }
@@ -3999,7 +3990,7 @@ textarea::placeholder {
 .notebook-location strong { font-size: 13px; color: var(--ink); }
 .notebook-write { min-height: 40px; padding: 9px 14px; border-radius: 11px; font-size: 13px; }
 .android-app .book-viewport { top: 55px; }
-.android-app .mobile-bottom-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; box-shadow: 0 -3px 16px rgba(23,32,51,.06); }
+.android-app .mobile-bottom-nav { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; box-shadow: 0 -3px 16px rgba(23,32,51,.06); }
 .android-app .mobile-bottom-nav button { gap: 4px; }
 .android-app .mobile-bottom-nav small { font-size: 11px; }
 .android-app .mobile-bottom-nav button.active { color: #244da8; background: var(--accent-soft); }
@@ -4017,6 +4008,7 @@ textarea::placeholder {
 .android-app .sidebar:not([data-panel="pages"]) .page-list,
 .android-app .sidebar:not([data-panel="pages"]) .notebook-search,
 .android-app .sidebar:not([data-panel="pages"]) .notebook-search-results,
+.android-app .sidebar:not([data-panel="pages"]) .journal-order-control,
 .android-app .sidebar:not([data-panel="pages"]) .selected-page-actions,
 .android-app .sidebar[data-panel="add"] .sidebar-footer,
 .android-app .sidebar[data-panel="manage"] .templates { display: none; }
@@ -4024,6 +4016,10 @@ textarea::placeholder {
 .android-app .sidebar .template-grid button { min-height: 56px; font-size: 14px; }
 .android-app .notebook-calendar-dialog { width: 100vw; max-width: 560px; max-height: calc(100dvh - var(--safe-top) - 8px); margin: auto auto 0; border-radius: 20px 20px 0 0; }
 .android-app .mobile-write-symbols button { min-height: 44px; font-size: 13px; }
+.journal-order-control { display: grid; gap: 6px; padding: 0 12px 10px; font-size: 11px; color: var(--muted); }
+.journal-order-control select { width: 100%; min-width: 0; min-height: 40px; padding: 8px; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; background: var(--surface, #fff); font-size: 12px; }
+.journal-tools-button { min-height: 40px; padding: 6px 10px; font-size: 12px; }
+.journal-tools-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 @media print {
   .notebook-context, .notebook-tabs, .notebook-search, .notebook-search-results, .notebook-calendar-dialog { display: none !important; }
 }
