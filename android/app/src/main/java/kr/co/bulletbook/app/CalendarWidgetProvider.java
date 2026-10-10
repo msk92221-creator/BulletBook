@@ -10,6 +10,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.View;
 import android.widget.RemoteViews;
 
@@ -29,8 +32,8 @@ import java.util.Map;
  * 홈 화면 한 달 달력 위젯.
  *
  * 데이터는 MainActivity의 CloudAccountBridge가 SharedPreferences에 저장한
- * calendar_widget_v1_json 스냅샷에서 읽는다. 날짜를 누르면 현재 페이지 쓰기를
- * 열어 일반 기록·일정·루틴을 추가하고, 월 제목은 기존 월간 계획을 연다.
+ * calendar_widget_v1_json 및 가족 달력 캐시에서 읽는다. 날짜·월을 누르면
+ * BulletBook 안의 FamilyTeamRoom 달력으로 이동한다.
  */
 public class CalendarWidgetProvider extends AppWidgetProvider {
 
@@ -48,7 +51,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("yyyy-MM");
     private static final DateTimeFormatter MONTH_LABEL =
         DateTimeFormatter.ofPattern("yyyy년 M월", Locale.KOREA);
-    private static final String[] WEEKDAYS = {"월", "화", "수", "목", "금", "토", "일"};
+    private static final String[] WEEKDAYS = {"일", "월", "화", "수", "목", "금", "토"};
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -125,10 +128,11 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
     ) {
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_calendar);
 
-        DayCounts counts = loadSnapshot(context);
         LocalDate today = LocalDate.now();
         YearMonth currentMonth = YearMonth.from(today);
         YearMonth month = loadDisplayedMonth(context, widgetId, currentMonth);
+        List<LocalDate> gridDates = visibleDates(month);
+        DayCounts counts = loadSnapshot(context, gridDates.get(0), gridDates.get(41));
 
         views.setTextViewText(R.id.widget_month_label, month.format(MONTH_LABEL));
         views.setOnClickPendingIntent(
@@ -259,7 +263,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
 
     static List<LocalDate> visibleDates(YearMonth month) {
         LocalDate first = month.atDay(1);
-        LocalDate start = first.minusDays(first.getDayOfWeek().getValue() - 1L);
+        LocalDate start = first.minusDays(first.getDayOfWeek().getValue() % 7);
         List<LocalDate> dates = new ArrayList<>(42);
         for (int index = 0; index < 42; index++) {
             dates.add(start.plusDays(index));
@@ -310,7 +314,14 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
             cell.setViewVisibility(R.id.widget_cell_dots, View.GONE);
         } else {
             cell.setViewVisibility(R.id.widget_cell_dots, View.VISIBLE);
-            cell.setTextViewText(R.id.widget_cell_dots, summary);
+            SpannableString colored=new SpannableString(summary);
+            int offset=0;
+            String[] lines=summary.split("\n");
+            for(int index=0;index<Math.min(lines.length,count.colors.size());index++){
+                try{colored.setSpan(new ForegroundColorSpan(Color.parseColor(count.colors.get(index))),offset,offset+lines[index].length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);}catch(Exception ignored){}
+                offset+=lines[index].length()+1;
+            }
+            cell.setTextViewText(R.id.widget_cell_dots, colored);
             cell.setTextColor(
                 R.id.widget_cell_dots,
                 Color.parseColor(isCurrentMonth ? "#475569" : "#a7b2c2")
@@ -344,14 +355,14 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
     }
 
     /** SharedPreferences의 스냅샷을 날짜별 일정 수로 변환한다. */
-    private static DayCounts loadSnapshot(Context context) {
+    private static DayCounts loadSnapshot(Context context, LocalDate from, LocalDate to) {
         DayCounts result = new DayCounts();
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String json = prefs.getString(SNAPSHOT_KEY, "");
         if (json == null || json.isEmpty()) return result;
         try {
             JSONObject root = new JSONObject(json);
-            JSONObject days = root.optJSONObject("days");
+            JSONObject days = FamilyCalendarStore.widgetDays(context,root,from,to);
             if (days == null) return result;
             for (java.util.Iterator<String> it = days.keys(); it.hasNext(); ) {
                 String key = it.next();
@@ -363,6 +374,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
                 dc.migrated = entry.optInt("migrated", 0);
                 dc.scheduled = entry.optInt("scheduled", 0);
                 JSONArray items = entry.optJSONArray("items");
+                JSONArray colors = entry.optJSONArray("colors");
                 if (items != null) {
                     for (int index = 0; index < Math.min(items.length(), 3); index++) {
                         String item = items.optString(index, "")
@@ -370,6 +382,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
                             .trim();
                         if (!item.isEmpty()) {
                             dc.items.add(item.substring(0, Math.min(item.length(), 80)));
+                            dc.colors.add(colors==null?"#475569":colors.optString(index,"#475569"));
                         }
                     }
                 }
@@ -420,5 +433,6 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         int migrated;
         int scheduled;
         final List<String> items = new ArrayList<>();
+        final List<String> colors = new ArrayList<>();
     }
 }

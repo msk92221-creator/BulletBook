@@ -461,6 +461,7 @@
   let mobileWriteDateContext = "";
   let advancedMobileEditing = false;
   let pageListDragState = null;
+  let familyCalendar = null;
   let cloudAuthWindow = null;
   let pageZoom = 1;
   let pagePanX = 0;
@@ -1705,8 +1706,14 @@
   function calendarEventsForDate(value, sourceBook = book) {
     const date = normalizedDateOrBlank(value);
     if (!date) return [];
-    return (sourceBook.calendarEvents || [])
-      .filter(event => event.date === date)
+    const family = typeof familyCalendar !== "undefined" && sourceBook === book ? familyCalendar : null;
+    return [...(sourceBook.calendarEvents || [])
+      .filter(event => event.date === date && !family?.hides(event.missionId ? `mission:${event.missionId}:${event.date}` : `event:${event.id}`)),
+      ...(family?.events(date) || []).map(event => {
+        const original=event.sourceId?(sourceBook.calendarEvents||[]).find(item=>
+          (item.missionId?`mission:${item.missionId}:${item.date}`:`event:${item.id}`)===event.sourceId):null;
+        return {...original,...event,familyEvent:true};
+      })]
       .sort((left, right) => String(left.createdAt || "").localeCompare(String(right.createdAt || "")));
   }
 
@@ -1715,6 +1722,7 @@
   }
 
   function calendarEventText(event) {
+    if (event?.familyEvent) return `${event.time ? event.time + " " : ""}${event.title}`;
     return `${calendarEventSymbol(event)} ${String(event?.title || "").trim()}`.trim();
   }
 
@@ -1729,6 +1737,7 @@
     book.calendarEvents ||= [];
     const existing = book.calendarEvents.find(event =>
       event.date === date && event.title === title &&
+      !(typeof familyCalendar !== "undefined" && familyCalendar?.deleted(`event:${event.id}`)) &&
       (event.column || "") === (column === "daily-todo" || column === "daily-log" ? column : "")
     );
     if (existing) return existing;
@@ -1788,6 +1797,7 @@
       const missionKey = event?.missionId ? `${date}|${event.missionId}` : "";
       if (missionKey && representedMissionDates.has(missionKey)) continue;
       if (missionKey) representedMissionDates.add(missionKey);
+      if (typeof familyCalendar !== "undefined" && familyCalendar?.hides(event.missionId ? `mission:${event.missionId}:${date}` : `event:${event.id}`)) continue;
       addCalendarWidgetItem(days, date, event.status || "open", calendarEventText(event));
     }
 
@@ -1810,10 +1820,16 @@
         const missionKey = `${dateValue}|${mission.id}`;
         if (representedMissionDates.has(missionKey)) continue;
         representedMissionDates.add(missionKey);
+        if (typeof familyCalendar !== "undefined" && familyCalendar?.hides(`mission:${mission.id}:${dateValue}`)) continue;
         addCalendarWidgetItem(days, dateValue, "open", missionBulletText(mission));
       }
     }
-    return { version: 3, days };
+    if (typeof familyCalendar === "undefined" || !familyCalendar?.isConnected()) return { version: 3, days };
+    const localDays = JSON.parse(JSON.stringify(days));
+    for (const [date, events] of Object.entries(familyCalendar.days())) {
+      for (const event of events) addCalendarWidgetItem(days,date,event.status,`${event.time ? event.time + " " : ""}${event.title}`);
+    }
+    return { version: 4, days, localDays, familyConnected: true };
   }
 
   function syncCalendarWidget() {
@@ -1996,7 +2012,7 @@
     );
     const date = normalizedDateOrBlank(dateValue);
     const missions = date ? missionsDueOn(dateFromIso(date))
-      .filter(mission => !representedMissionIds.has(String(mission.id)))
+      .filter(mission => !representedMissionIds.has(String(mission.id)) && !(typeof familyCalendar !== "undefined" && familyCalendar?.hides(`mission:${mission.id}:${date}`)))
       .map(mission => missionBulletText(mission)) : [];
     const items = [...events, ...missions];
     if (!items.length) return "";
@@ -2069,6 +2085,7 @@
   function openCalendarEventEditor(dateValue) {
     const date = normalizedDateOrBlank(dateValue);
     if (!date) return;
+    if (familyCalendar?.isConnected()) { familyCalendar.open(date); return; }
     editingCalendarDate = date;
     const parsed = dateFromIso(date);
     refs.calendarEventTitle.textContent = `${dailyDateLabel(parsed)} 일정`;
@@ -8724,6 +8741,7 @@
     }
     if (scheduleCloud) cloudSync?.scheduleUpload();
     syncCalendarWidget();
+    familyCalendar?.refresh();
     return true;
   }
 
@@ -9317,6 +9335,7 @@
   }
 
   function handleAndroidBack() {
+    if (familyCalendar?.isOpen()) { familyCalendar.close(); return true; }
     if (refs.calendarEventDialog.open) {
       closeCalendarEventEditor();
       return true;
@@ -10009,6 +10028,7 @@
     window.__bulletBookHandleBack = handleAndroidBack;
     // 위젯 날짜/월 클릭 deep-link. cold start 시 WebView 준비 후 native가 호출한다.
     window.__bulletBookOpenWidgetDate = value => {
+      if (familyCalendar && normalizedDateOrBlank(value)) { familyCalendar.open(value); return true; }
       const date = dateFromIso(value);
       if (!date) return false;
       const daily = ensureDailyPage(date);
@@ -10033,6 +10053,7 @@
     window.__bulletBookOpenWidgetMonth = value => {
       const match = /^(\d{4})-(\d{1,2})$/.exec(String(value || ""));
       if (!match) return false;
+      if (familyCalendar) { familyCalendar.open(`${match[1]}-${String(Number(match[2])).padStart(2,"0")}-01`); return true; }
       const year = Number(match[1]);
       const month = Number(match[2]);
       const page = book.pages.find(candidate => candidate.type === "monthly" && (() => {
@@ -10051,6 +10072,64 @@
       return true;
     };
     window.addEventListener("afterprint", () => { refs.printBook.innerHTML = ""; });
+  }
+
+  async function exportFamilyCalendarEntries(isCurrent) {
+    const entries = [], represented = new Set();
+    const today = new Date(), start = new Date(today.getFullYear()-1,0,1), end = new Date(today.getFullYear()+2,11,31);
+    for (const event of book.calendarEvents || []) {
+      const sourceId = event.missionId ? `mission:${event.missionId}:${event.date}` : `event:${event.id}`;
+      if (represented.has(sourceId)) continue;
+      represented.add(sourceId);
+      entries.push({sourceId,date:event.date,title:calendarEventText(event),kind:event.missionId?"mission":"event"});
+    }
+    const completions = new Map(), counts = new Map();
+    const count = (id,from,to) => {
+      const key = `${id}|${from}|${to}`;
+      if (!counts.has(key)) {
+        if (!completions.has(id)) completions.set(id,completedMissionElements(id).map(record=>record.date));
+        counts.set(key,completions.get(id).filter(date=>date>=from && date<=to).length);
+      }
+      return counts.get(key);
+    };
+    let processed = 0;
+    for (let date=start;date<=end;date=offsetDate(date,1)) {
+      if (processed++ % 14 === 0) { await new Promise(resolve=>setTimeout(resolve,0)); if(!isCurrent())return null; }
+      const value = isoDate(date);
+      for (const mission of missionsDueOn(date,count)) {
+        const sourceId = `mission:${mission.id}:${value}`;
+        if (represented.has(sourceId)) continue;
+        represented.add(sourceId);
+        entries.push({sourceId,date:value,title:missionBulletText(mission),kind:"mission"});
+      }
+    }
+    return {entries,from:isoDate(start),to:isoDate(end)};
+  }
+
+  function initializeFamilyCalendar() {
+    familyCalendar = window.BulletBookFamilyHost?.create({
+      getBook:()=>book,
+      exportEntries:exportFamilyCalendarEntries,
+      backup:value=>saveRecoverySnapshot(value,{source:"device",reason:"before-family-calendar-link"}),
+      bindings:(scope,bindings)=>{
+        if(JSON.stringify(book.familyCalendarBindings?.[scope])===JSON.stringify(bindings))return;
+        book.familyCalendarBindings ||= {};
+        book.familyCalendarBindings[scope]=bindings;
+        markDirty();
+      },
+      changed:()=>{
+        if(!textEditBefore && !document.activeElement?.isContentEditable && !document.activeElement?.matches?.("input,textarea,select"))renderSpread();
+        syncCalendarWidget();
+      },
+    });
+    const button = document.createElement("button");
+    button.type="button";button.className="mobile-menu-action";button.textContent="패밀리팀룸 · 가족 달력";
+    button.addEventListener("click",()=>{refs.mobileMoreDialog.close();familyCalendar?.open(isoDate(new Date()));});
+    $(".mobile-more-actions")?.prepend(button);
+    const desktopButton=document.createElement("button");
+    desktopButton.type="button";desktopButton.textContent="패밀리팀룸 · 가족 달력";
+    desktopButton.addEventListener("click",()=>familyCalendar?.open(isoDate(new Date())));
+    $("#desktopUpdateButton")?.before(desktopButton);
   }
 
   async function init() {
@@ -10075,6 +10154,7 @@
     renderAll();
     if (calendarGroupsRepaired || recordLayoutRepaired || calendarSetupAdded || missionsMaterialized) markDirty();
     if (!localStorage.getItem(WELCOME_KEY)) refs.welcome.showModal();
+    initializeFamilyCalendar();
     // 로컬 문서가 준비되면 즉시 위젯 날짜/월로 이동한다. OneDrive 응답이나
     // 여러 해의 위젯 요약 계산이 글쓰기 화면 진입을 막아서는 안 된다.
     const native = window.BulletBookNative;

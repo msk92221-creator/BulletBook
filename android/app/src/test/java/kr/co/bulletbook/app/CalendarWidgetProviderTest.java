@@ -11,12 +11,12 @@ import java.util.List;
 public class CalendarWidgetProviderTest {
 
     @Test
-    public void visibleMonthAlwaysUsesSixMondayFirstRows() {
+    public void visibleMonthMatchesFamilyCalendarSundayFirstRows() {
         List<LocalDate> dates = CalendarWidgetProvider.visibleDates(YearMonth.of(2026, 8));
 
         assertEquals(42, dates.size());
-        assertEquals(LocalDate.of(2026, 7, 27), dates.get(0));
-        assertEquals(LocalDate.of(2026, 9, 6), dates.get(41));
+        assertEquals(LocalDate.of(2026, 7, 26), dates.get(0));
+        assertEquals(LocalDate.of(2026, 9, 5), dates.get(41));
     }
 
     @Test

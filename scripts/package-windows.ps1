@@ -25,6 +25,7 @@ $zipPath = Join-Path $OutputDirectory "BulletBook_windows_v$version.zip"
 $files = @(
   "app.js",
   "cloud-sync.js",
+  "family-bridge.js",
   "favicon.svg",
   "index.html",
   "package.json",
@@ -41,6 +42,9 @@ if (Test-Path -LiteralPath $stagingRoot) {
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 try {
+  $familyBuild = Join-Path $repositoryRoot 'family-room'
+  if (-not (Test-Path -LiteralPath (Join-Path $familyBuild 'family.js'))) { throw 'Run npm run build:web first.' }
+  Copy-Item -LiteralPath $familyBuild -Destination (Join-Path $packageRoot 'family-room') -Recurse
   foreach ($relativePath in $files) {
     $source = Join-Path $repositoryRoot $relativePath
     if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {

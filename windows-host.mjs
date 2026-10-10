@@ -49,6 +49,10 @@ const publicFiles = new Set([
   "index.html",
   "app.js",
   "cloud-sync.js",
+  "family-bridge.js",
+  "family-room/index.html",
+  "family-room/family.js",
+  "family-room/family.css",
   "styles.css",
   "favicon.svg",
 ]);

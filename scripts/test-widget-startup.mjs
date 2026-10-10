@@ -27,6 +27,7 @@ for (const reject of [false, true]) {
     refs: { bookTitle: {}, welcome: { showModal: () => calls.push("welcome") } },
     localStorage: { getItem: () => true }, WELCOME_KEY: "welcome",
     bindEvents: noop, loadSavedBook: async () => null, normalizeBook: value => value,
+    initializeFamilyCalendar: noop,
     createDefaultBook: () => { throw new Error("local book should load"); },
     ensureCalendarFeatureSetup: () => false, materializeDueMissions: () => 0,
     initializeHistory: noop, updateViewModeControls: noop,

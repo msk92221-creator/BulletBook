@@ -1,0 +1,5 @@
+.bulletbook-connection{height:54px;padding:6px 10px;display:flex;gap:12px;align-items:center;background:#eef0ff;color:#4555ce;border-bottom:1px solid #dde1ef;position:sticky;top:0;z-index:100}
+.bulletbook-connection button{flex:none;padding:9px;border:1px solid #cbd1ee;border-radius:9px;background:white;color:#4555ce;font:inherit}
+.bulletbook-connection span{font-size:11px;line-height:1.4}
+body{height:100dvh;overflow:auto}.app-shell{min-height:calc(100dvh - 54px)}
+.sidebar{top:54px}.auth-page{min-height:calc(100dvh - 80px)}

@@ -1312,6 +1312,7 @@ public class MainActivity extends BridgeActivity {
         public void pushCalendarWidget(String requestId, String json) {
             cloudExecutor.execute(() -> {
                 try {
+                    FamilyCalendarStore.saveLocalDays(MainActivity.this, new JSONObject(json));
                     preferences().edit()
                         .putString("calendar_widget_v1_json", json == null ? "" : json)
                         .apply();
@@ -1325,6 +1326,19 @@ public class MainActivity extends BridgeActivity {
         }
 
         // WebView(app.js)가 초기화를 마친 뒤 보관된 위젯 딥링크를 전달해 달라고 알린다.
+        @JavascriptInterface
+        public void configureFamilyCalendar(String requestId, String json) {
+            cloudExecutor.execute(() -> {
+                try {
+                    FamilyCalendarStore.configure(MainActivity.this,new JSONObject(json));
+                    CalendarWidgetProvider.refreshWidgets(MainActivity.this);
+                    sendResult(requestId,true,"ok");
+                } catch(Exception error) {
+                    sendError(requestId,"FAMILY_SYNC_ERROR","가족 달력 위젯 연결을 확인해 주세요.");
+                }
+            });
+        }
+
         @JavascriptInterface
         public void readyForWidgetNavigation(String requestId) {
             runOnUiThread(() -> {
