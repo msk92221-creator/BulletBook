@@ -22,8 +22,8 @@ android {
         applicationId "kr.co.bulletbook.next"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 108
-        versionName "0.41.4"
+        versionCode 109
+        versionName "0.42.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -59,6 +59,7 @@ repositories {
 }
 
 dependencies {
+    implementation "androidx.work:work-runtime:2.11.2"
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"

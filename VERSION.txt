@@ -1,6 +1,7 @@
 BulletBook Windows + Android
-Version 0.41.4
+Version 0.42.0
 
 Windows + Android source
 Document format: bulletbook v6 (.buj)
 OneDrive sync: Microsoft Graph account sync
+Family calendar: FamilyTeamRoom Firebase

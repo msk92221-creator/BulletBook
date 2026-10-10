@@ -231,6 +231,8 @@ h2, h3 { margin: 0; }
 h2 { font-size: 20px; }
 h3 { font-size: 15px; }
 
+.family-calendar-dialog { width:100vw; height:100dvh; max-width:100vw; max-height:100dvh; padding:0; margin:0; border:0; border-radius:0; background:#fff; }
+.family-calendar-dialog iframe { width:100%; height:100%; border:0; display:block; }
 .page-list {
   --page-tree-step: 16px;
   --page-leading-columns: 18px 28px;

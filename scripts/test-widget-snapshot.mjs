@@ -100,3 +100,14 @@ await runScheduled();
 assert.equal(pushed.length, 2);
 assert.ok(pushed[1].days["2026-08-12"].items.includes("○ 새 일정"));
 console.log("Widget snapshot parity, yielding, caching and cancellation: ok");
+context.familyCalendar={isConnected:()=>true,hides:id=>id==='event:saved',days:()=>({
+  '2026-08-11':[{title:'가족이 수정한 일정',time:'12:30',status:'open'}],
+  '2020-01-01':[{title:'과거 가족 일정',status:'open'}],
+})};
+const familySnapshot=await context.buildCalendarWidgetSnapshot();
+assert.equal(familySnapshot.version,4);
+assert.equal(familySnapshot.days['2026-08-11'].items.includes('⊗ 기존 일정'),false);
+assert.equal(familySnapshot.days['2026-08-11'].items.includes('12:30 가족이 수정한 일정'),true);
+assert.equal(familySnapshot.localDays['2020-01-01'],undefined);
+assert.equal(familySnapshot.days['2020-01-01'].items[0],'과거 가족 일정');
+console.log('Family widget overlay: linked local copies hidden, unsynced records retained, historical schedules present.');
