@@ -514,6 +514,7 @@
       align: options.align ?? "left",
       gridLocked: options.gridLocked ?? false,
       layoutTarget: options.layoutTarget ?? null,
+      templateLayoutVersion: 1,
     };
     [
       "missionId", "goalId", "areaId", "missionDate",
@@ -1659,6 +1660,11 @@
     // 상위 그룹과 모든 하위 그룹을 하나의 연속된 페이지 블록으로 유지한다.
     value.pageOrder = value.pageOrder === "manual" ? "manual" : "hierarchy";
     value.pages = normalizeGroupPageOrder(value.pages, value.groups, value.pageOrder === "hierarchy");
+    if (alignExistingTemplateRecords(value)) {
+      Object.defineProperty(value, "__recordLayoutRepaired", {
+        value: true, configurable: true, enumerable: false,
+      });
+    }
     return value;
   }
 
@@ -5209,7 +5215,8 @@
       const rowY = 164 + i * 32;
       const covered = page.elements.some(element =>
         element.type === "text" &&
-        (element.layoutTarget === "monthly-schedule" || element.gridLocked) &&
+        (element.layoutTarget === "monthly-schedule" || (element.gridLocked &&
+          Number(element.x) < 400 && Number(element.x) + Number(element.width) > 120)) &&
         Math.abs((Number(element.y) || 0) - rowY) <= GRID_SIZE / 2
       );
       return `<button type="button" class="template-note fixed-monthly-day" data-fixed-date="true" ${date ? `data-calendar-date="${date}"` : "disabled"} style="left:58px;top:${y}px;width:55px">${dateText}</button>
@@ -5223,9 +5230,13 @@
     return fixedDateTitleBlock(monthTitle, monthlySubtitle, "monthly", "월간 계획 연도와 월 변경") + rows +
       `<span class="template-vline" style="right:242px;top:160px;bottom:74px"></span>
        <span class="template-label" data-template-key="monthly-goal-heading" style="right:74px;top:165px;font-size:17px;line-height:22px">이번 달 목표</span>
-       <span class="template-note" data-template-key="monthly-goal-1" style="right:90px;top:229px;font-size:15px;line-height:22px">• 목표 1</span>
-       <span class="template-note" data-template-key="monthly-goal-2" style="right:90px;top:261px;font-size:15px;line-height:22px">• 목표 2</span>
-       <span class="template-note" data-template-key="monthly-goal-3" style="right:90px;top:293px;font-size:15px;line-height:22px">• 목표 3</span>
+       ${[1, 2, 3].map(number => {
+         const y = 229 + (number - 1) * 32;
+         const custom = Object.prototype.hasOwnProperty.call(page.templateText || {}, `x.monthly-goal-${number}`);
+         const covered = !custom && page.elements.some(element => element.type === "text" &&
+           element.layoutTarget === "monthly-goal" && rectsOverlap(element, { x: 430, y, width: 176, height: 22 }));
+         return `<span class="template-note" data-template-key="monthly-goal-${number}" style="right:90px;top:${y}px;font-size:15px;line-height:22px${covered ? ";visibility:hidden" : ""}">• 목표 ${number}</span>`;
+       }).join("")}
        <span class="template-label" data-template-key="monthly-queue" style="right:91px;top:389px;font-size:17px;line-height:22px">Queue</span>`;
   }
 
@@ -6179,6 +6190,181 @@
     ];
   }
 
+  // 내용·날짜·페이지는 건드리지 않고, 옛 기록의 칸과 줄 배치만 한 번 정리한다.
+  // 위치 정보가 없는 자유 기록은 본래 좌표로 칸을 확정할 수 있을 때만 옮긴다.
+  function existingRecordTarget(page, element, targets, sourceBook) {
+    if (element.type !== "text" || !String(element.text || "").trim()) return null;
+    const x = Number(element.x);
+    const y = Number(element.y);
+    const width = Number(element.width);
+    let target = targets.find(item => item.id === element.layoutTarget);
+    if (element.layoutTarget && !target) return null;
+    if (!target) {
+      if (![x, y, width].every(Number.isFinite) || width < 48 || y < 140) return null;
+      if (page.type === "daily") {
+        if (x < 24 || x > 620 || width > 320) return null;
+        target = targets.find(item => item.id === (x < PAGE_W / 2 ? "daily-todo" : "daily-log"));
+      } else if (isWeeklyPage(page)) {
+        if (page.type === "weekly-left" && y < 300 && x >= 24 && x + width <= 636) {
+          target = targets.find(item => item.id === "weekly-overview");
+        } else {
+          const offsets = page.type === "weekly-left" ? [0, 1, 2, 3] : [4, 5, 6];
+          const columnWidth = PAGE_W / offsets.length;
+          if (width > columnWidth + 12 || x < 0 || x >= PAGE_W) return null;
+          const offset = offsets[Math.floor(x / columnWidth)];
+          target = targets.find(item => item.id === `weekly-day-${offset}`);
+        }
+      } else if (page.type === "monthly") {
+        if (x >= 410 && y >= 190 && y < 370) target = targets.find(item => item.id === "monthly-goal");
+        else if (x >= 90 && x < 400 && width <= 310) target = targets.find(item => item.id === "monthly-schedule");
+      } else {
+        // 수동으로 놓은 제목이나 여러 칸에 걸친 메모는 그대로 남긴다.
+        const candidates = targets.filter(item => !item.detail && item.id !== "page-auto" &&
+          x >= item.x - 24 && x + width <= item.x + item.width + 24 &&
+          y >= item.yStart - 24 && y < existingRecordBottom(item, targets));
+        target = candidates.sort((left, right) => right.yStart - left.yStart)[0];
+      }
+    }
+    if (!target || target.detail === "year-day") return null;
+    if (target.id !== "monthly-schedule") return target;
+    // 월간 날짜 줄은 다른 날짜로 밀어내지 않는다. 날짜가 없으면 옛 행을 그대로 읽는다.
+    const context = monthlyDateContext(page, sourceBook.groups);
+    const explicit = normalizedDateOrBlank(element.calendarDate);
+    let day = Math.round((y - 164) / 32) + 1;
+    if (explicit) {
+      if (!context.hasCalendarDate || !explicit.startsWith(`${context.year}-${String(context.month).padStart(2, "0")}-`)) return null;
+      day = Number(explicit.slice(-2));
+    } else if (!Number.isFinite(y) || Math.abs(y - (164 + (day - 1) * 32)) > 16) return null;
+    const days = context.hasCalendarDate ? new Date(context.year, context.month, 0).getDate() : 31;
+    return day >= 1 && day <= days ? { ...target, yStart: 164 + (day - 1) * 32 } : null;
+  }
+
+  function existingRecordBottom(target, targets) {
+    // 각 양식의 테두리·다음 제목 앞에서 멈춘다. 월간 Queue 영역도 목표 칸과 구분한다.
+    const panelBottoms = {
+      "monthly-goal": 370, "weekly-overview": 278,
+      "project-clear": 256, "project-stage": 382, "project-boss": 702, "project-next": 702, "project-learning": 878,
+      "tracker-result": 256, "tracker-metric": 474, "tracker-week": 678, "tracker-daily": 878, "tracker-rule": 878,
+    };
+    return targets.filter(item => item.yStart > target.yStart + 24 &&
+      item.x < target.x + target.width && item.x + item.width > target.x)
+      .reduce((bottom, item) => Math.min(bottom, item.yStart - 38), panelBottoms[target.id] || PAGE_H - 58);
+  }
+
+  function existingRecordPlacements(page, target, elements, targets, sourceBook, fontScale = 1) {
+    const x = snapToGrid(target.x, 0, PAGE_W - GRID_SIZE);
+    const width = Math.min(snapSizeToGrid(target.width), PAGE_W - x);
+    const monthlyRow = target.id === "monthly-schedule";
+    const start = monthlyRow ? target.yStart : snapToGrid(target.yStart, 0, PAGE_H - GRID_SIZE);
+    const rowGap = monthlyRow ? 32 : snapSizeToGrid(target.rowGap);
+    const nextSection = existingRecordBottom(target, targets);
+    const bottom = monthlyRow ? start + 32 : nextSection;
+    const moving = new Set(elements);
+    const occupied = page.elements.filter(element => !moving.has(element) &&
+      element.type === "text" && String(element.text || "").trim()).map(element => ({
+        x: Number(element.x) || 0, y: Number(element.y) || 0,
+        width: Number(element.width) || 0, height: Number(element.height) || 0,
+      }));
+    if (target.id === "monthly-goal") {
+      [1, 2, 3].forEach(number => {
+        const text = page.templateText?.[`x.monthly-goal-${number}`];
+        if (!String(text || "").trim()) return;
+        const height = Math.ceil(mobileTextWrappedLineCount(text, { width: 176, fontSize: 15 }) * 22 + 6);
+        occupied.push({ x: 430, y: 229 + (number - 1) * 32, width: 176, height });
+      });
+    }
+    // 일정은 기존 공유 일정 그대로 두고 그 일정이 차지할 줄을 비워 둔다.
+    let events = [];
+    if (!page.continuationOf && page.type === "daily") {
+      events = calendarEventsForDate(page.pageDate, sourceBook).filter(event =>
+        target.id === "daily-todo" ? !event.column || event.column === target.id : event.column === target.id);
+    } else if (!page.continuationOf && isWeeklyPage(page) && /^weekly-day-\d$/u.test(target.id)) {
+      const weekStart = normalizedWeekStart(page.weekStart);
+      if (weekStart) events = calendarEventsForDate(isoDate(offsetDate(dateFromIso(weekStart), Number(target.id.slice(-1)))), sourceBook);
+    }
+    for (const event of events) {
+      let reserved = false;
+      for (let y = start; y + GRID_SIZE <= bottom; y += rowGap) {
+        const rect = { x, y, width, height: GRID_SIZE };
+        if (occupied.some(other => rectsOverlap(rect, other))) continue;
+        occupied.push(rect);
+        reserved = true;
+        break;
+      }
+      if (!reserved) return null;
+    }
+    const placements = [];
+    let cursor = start;
+    for (const element of [...elements].sort((left, right) => (Number(left.y) || 0) - (Number(right.y) || 0))) {
+      const originalSize = Math.max(8, Number(element.fontSize) || target.fontSize || 16);
+      const fontSize = Math.max(Math.min(originalSize, 12), Math.floor(originalSize * fontScale * 2) / 2);
+      const measured = Math.ceil(mobileTextWrappedLineCount(element.text, { ...target, width, fontSize }) * fontSize * 1.5 + 8);
+      const height = monthlyRow ? measured : Math.max(GRID_SIZE, measured);
+      let slot = null;
+      for (let y = cursor; y + height <= bottom; y += monthlyRow ? 32 : GRID_SIZE) {
+        const rect = { x, y, width, height };
+        if (!occupied.some(other => rectsOverlap(rect, other))) { slot = rect; break; }
+      }
+      // 한 칸에 다 들어가지 않으면 그 칸은 원래 상태로 남긴다. 잘라내거나 다른 날짜로 옮기지 않는다.
+      if (!slot) return null;
+      placements.push({ element, slot: { ...slot, fontSize } });
+      occupied.push(slot);
+      cursor = slot.y + Math.max(rowGap, slot.height + 4);
+    }
+    return placements;
+  }
+
+  function alignExistingTemplateRecords(value) {
+    let aligned = 0;
+    value.pages.forEach(page => {
+      const targets = mobileWriteTargetsForPage(page);
+      const groups = new Map();
+      page.elements.forEach(element => {
+        if (Number(element.templateLayoutVersion) >= 1) return;
+        const target = existingRecordTarget(page, element, targets, value);
+        if (!target) return;
+        const key = `${target.id}:${target.yStart}`;
+        if (!groups.has(key)) groups.set(key, { target, elements: [] });
+        groups.get(key).elements.push(element);
+      });
+      groups.forEach(({ target, elements }) => {
+        // 긴 기록은 같은 페이지 안에서 읽을 수 있게 글자 크기를 제한적으로 조정한다.
+        // 12px보다 작게 줄이지 않으며, 그래도 넘치면 원래 배치를 보존한다.
+        let placements = null;
+        for (const scale of [1, .9, .8, .75]) {
+          placements = existingRecordPlacements(page, target, elements, targets, value, scale);
+          if (placements) break;
+        }
+        if (!placements) return;
+        placements.forEach(({ element, slot }) => {
+          const keys = ["x", "y", "width", "height", "fontSize", "gridLocked", "layoutTarget"];
+          element.templateLayoutOriginal ||= Object.fromEntries(keys
+            .filter(key => Object.prototype.hasOwnProperty.call(element, key)).map(key => [key, element[key]]));
+          Object.assign(element, slot, { gridLocked: true, layoutTarget: target.id, templateLayoutVersion: 1 });
+          aligned += 1;
+        });
+      });
+    });
+    return aligned;
+  }
+
+  function restoreOriginalRecordLayout() {
+    let restored = 0;
+    book.pages.forEach(page => page.elements.forEach(element => {
+      if (!element.templateLayoutOriginal) return;
+      ["x", "y", "width", "height", "fontSize", "gridLocked", "layoutTarget"].forEach(key => {
+        if (Object.prototype.hasOwnProperty.call(element.templateLayoutOriginal, key)) element[key] = element.templateLayoutOriginal[key];
+        else delete element[key];
+      });
+      delete element.templateLayoutOriginal;
+      element.templateLayoutVersion = 1;
+      restored += 1;
+    }));
+    if (restored) { commitHistory(); renderAll(); }
+    refs.mobileMoreDialog.close();
+    showToast(restored ? "기록 내용은 유지하고 정리 전 배치로 되돌렸습니다" : "되돌릴 기록 배치가 없습니다");
+  }
+
   function mobileWritePageMeta(page) {
     if (page?.type === "blank" && (isYearCalendarTemplate(page.planTemplate))) {
       return {
@@ -7064,6 +7250,8 @@
     $("#notebookPageTitle").textContent = pageDisplayTitle(page);
     $("#notebookPath").textContent = groupPathForId(page.groupId).map(group => group.name).join(" › ") || "내 노트";
     $("#journalPageOrder").value = book.pageOrder === "manual" ? "manual" : "hierarchy";
+    $("#restoreRecordLayoutButton").disabled = !book.pages.some(item =>
+      item.elements.some(element => element.templateLayoutOriginal));
     $("#journalToolsButton").setAttribute("aria-pressed", String(advancedMobileEditing));
     $("#journalToolsButton").textContent = advancedMobileEditing ? "✎ 도구 닫기" : "✎ 편집 도구";
     const calendarOpen = $("#notebookCalendarDialog").open;
@@ -9498,6 +9686,7 @@
       exportBook();
     });
     refs.mobileRecoveryButton.addEventListener("click", openRecoveryDialog);
+    $("#restoreRecordLayoutButton").addEventListener("click", restoreOriginalRecordLayout);
     refs.mobileUpdateButton.addEventListener("click", checkForAppUpdate);
     refs.desktopUpdateButton.addEventListener("click", checkForDesktopUpdate);
     refs.recoveryButton.addEventListener("click", openRecoveryDialog);
@@ -9823,12 +10012,14 @@
     const calendarSetupAdded = ensureCalendarFeatureSetup();
     const calendarGroupsRepaired = book.__calendarGroupsRepaired === true;
     delete book.__calendarGroupsRepaired;
+    const recordLayoutRepaired = book.__recordLayoutRepaired === true;
+    delete book.__recordLayoutRepaired;
     const missionsMaterialized = materializeDueMissions() > 0;
     refs.bookTitle.value = book.title || "나의 불렛북";
     initializeHistory();
     updateViewModeControls();
     renderAll();
-    if (calendarGroupsRepaired || calendarSetupAdded || missionsMaterialized) markDirty();
+    if (calendarGroupsRepaired || recordLayoutRepaired || calendarSetupAdded || missionsMaterialized) markDirty();
     if (!localStorage.getItem(WELCOME_KEY)) refs.welcome.showModal();
     // 로컬 문서가 준비되면 즉시 위젯 날짜/월로 이동한다. OneDrive 응답이나
     // 여러 해의 위젯 요약 계산이 글쓰기 화면 진입을 막아서는 안 된다.
