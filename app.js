@@ -3076,7 +3076,9 @@
         if (!renderedGroups.has(group.id)) appendGroupHeader(group, depth);
         if (collapsedGroups.has(group.id)) hidden = true;
       });
-      if (!hidden) appendPage(page, index, path.length);
+      // 주간·일간은 같은 주차 그룹에 저장되지만 목차에서는 일간을 한 단계 더 들여쓴다.
+      const pageDepth = path.length + (page.type === "daily" && path.at(-1)?.kind === "week" ? 1 : 0);
+      if (!hidden) appendPage(page, index, pageDepth);
     });
     // 페이지가 없는 그룹도 계층을 유지한 채 편집할 수 있도록 남긴다.
     const childrenByParent = new Map();

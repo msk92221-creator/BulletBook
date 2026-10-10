@@ -3066,6 +3066,7 @@ body.resizing-page-list {
 
 /* --- 페이지 목록 --- */
 .android-app .page-list {
+  --page-tree-step: 24px;
   --page-leading-columns: 20px 26px;
   --page-row-gap: 6px;
   --page-row-padding: 8px;
@@ -3091,7 +3092,12 @@ body.resizing-page-list {
   opacity: .7;
 }
 .android-app .page-number { font-size: 10px; }
-.android-app .page-name { font-size: 14px; }
+.android-app .page-name {
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 /* 선택된 줄: 초록 배경을 가득 채우는 대신 왼쪽 띠와 옅은 바탕만 남긴다. */
 .android-app .page-item.current {
@@ -3994,7 +4000,7 @@ textarea::placeholder {
 .android-app .mobile-bottom-nav button { gap: 4px; }
 .android-app .mobile-bottom-nav small { font-size: 11px; }
 .android-app .mobile-bottom-nav button.active { color: #244da8; background: var(--accent-soft); }
-.android-app .sidebar { top: calc(60px + var(--safe-top)); width: min(100vw, 460px); }
+.android-app .sidebar { top: calc(60px + var(--safe-top)); width: min(100vw, 720px); }
 .android-app .sidebar-scrim { inset-block-start: calc(60px + var(--safe-top)); }
 .android-app .sidebar-header { padding: 14px 16px 10px; }
 .android-app .sidebar-header .eyebrow { display: none; }
