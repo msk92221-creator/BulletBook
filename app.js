@@ -932,14 +932,59 @@
     return !groupDescendantIdSet(groupId, groups).has(parentId);
   }
 
-  function normalizeGroupPageOrder(pages, groups) {
+  function normalizeGroupPageOrder(pages, groups, hierarchy = false) {
+    const groupById = new Map((groups || []).map(group => [group.id, group]));
+    const pageById = new Map((pages || []).map(page => [page.id, page]));
+    const originalIndex = new Map((pages || []).map((page, index) => [page.id, index]));
     const pagePaths = new Map((pages || []).map(page => [
       page.id,
       groupPathForId(page.groupId, groups).map(group => group.id),
     ]));
+    const groupNumber = group => Number(group?.year && group.kind === "year" ? group.year : group?.month) ||
+      Number(String(group?.name || "").match(/\d+/)?.[0]) || 0;
+    const compareKey = (left, right) => {
+      for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+        const difference = (left[i] || 0) - (right[i] || 0);
+        if (difference) return difference;
+      }
+      return 0;
+    };
+    const planKey = (page, groupId) => {
+      const group = groupById.get(groupId);
+      const path = pagePaths.get(page.id) || [];
+      const child = groupById.get(path[path.indexOf(groupId) + 1]);
+      if (child) {
+        if (group.kind === "year" && child.kind === "month") return [1, groupNumber(child)];
+        if (group.kind === "month" && child.kind === "week") {
+          return [1, Number(String(child.weekStart || "").replaceAll("-", "")) || groupNumber(child)];
+        }
+        return [2, 0];
+      }
+      const root = pageById.get(page.continuationOf) || page;
+      const continuation = page.continuationOf ? Number(page.continuationIndex) || 1 : 0;
+      if (group.kind === "year" && (String(root.planTemplate || "").startsWith("year-calendar-") ||
+          ["goals", "future-h1", "future-h2"].includes(root.type))) {
+        return [0, root.type === "goals" ? 0 : root.type === "future-h1" ? 1 : root.type === "future-h2" ? 2 : 3,
+          Number(root.months?.[0]) || Number(String(root.planTemplate).match(/m(\d+)$/)?.[1]) || 0,
+          originalIndex.get(root.id), continuation];
+      }
+      if (group.kind === "month" && root.type === "monthly") return [0, originalIndex.get(root.id), continuation];
+      if (group.kind === "week") {
+        if (["weekly-left", "weekly-right"].includes(root.type)) {
+          return [0, continuation, root.type === "weekly-right" ? 1 : 0, originalIndex.get(root.id)];
+        }
+        if (root.type === "daily" && /^\d{4}-\d{2}-\d{2}$/.test(root.pageDate || "")) {
+          return [1, Number(root.pageDate.replaceAll("-", "")), originalIndex.get(root.id), continuation];
+        }
+      }
+      return [2, 0];
+    };
     const normalizeSubtree = (groupId, candidates) => {
       const result = [];
       const emittedChildren = new Set();
+      if (hierarchy && ["year", "month", "week"].includes(groupById.get(groupId)?.kind)) {
+        candidates = [...candidates].sort((left, right) => compareKey(planKey(left, groupId), planKey(right, groupId)));
+      }
       candidates.forEach(page => {
         const path = pagePaths.get(page.id) || [];
         const position = path.indexOf(groupId);
@@ -961,15 +1006,21 @@
 
     const result = [];
     const emittedRoots = new Set();
+    const calendarRoots = hierarchy ? [...new Set((pages || []).map(page => pagePaths.get(page.id)?.[0]))]
+      .filter(id => groupById.get(id)?.kind === "year")
+      .sort((left, right) => groupNumber(groupById.get(left)) - groupNumber(groupById.get(right))) : [];
+    let calendarRootIndex = 0;
     (pages || []).forEach(page => {
       const path = pagePaths.get(page.id) || [];
       if (!path.length) {
         result.push(page);
         return;
       }
-      const rootId = path[0];
-      if (emittedRoots.has(rootId)) return;
-      emittedRoots.add(rootId);
+      const encounteredRoot = path[0];
+      if (emittedRoots.has(encounteredRoot)) return;
+      emittedRoots.add(encounteredRoot);
+      const rootId = hierarchy && groupById.get(encounteredRoot)?.kind === "year"
+        ? calendarRoots[calendarRootIndex++] : encounteredRoot;
       const rootPages = pages.filter(candidate =>
         (pagePaths.get(candidate.id) || [])[0] === rootId
       );
@@ -1606,7 +1657,8 @@
     // 페이지 목록 맨 아래에 "만든 적 없는 빈 그룹"으로 떠 보인다.
     pruneEmptyPageGroups(value);
     // 상위 그룹과 모든 하위 그룹을 하나의 연속된 페이지 블록으로 유지한다.
-    value.pages = normalizeGroupPageOrder(value.pages, value.groups);
+    value.pageOrder = value.pageOrder === "manual" ? "manual" : "hierarchy";
+    value.pages = normalizeGroupPageOrder(value.pages, value.groups, value.pageOrder === "hierarchy");
     return value;
   }
 
@@ -2750,6 +2802,9 @@
   }
 
   function commitHistory() {
+    book.pages = normalizeGroupPageOrder(book.pages, book.groups, book.pageOrder !== "manual");
+    const activeIndex = book.pages.findIndex(page => page.id === activePageId);
+    if (activeIndex >= 0) currentIndex = activeIndex;
     const snapshot = JSON.stringify(book);
     if (history[historyIndex] === snapshot) return;
     history = history.slice(0, historyIndex + 1);
@@ -3373,6 +3428,7 @@
     if (afterState === beforeState) return false;
     currentIndex = Math.max(0, book.pages.findIndex(page => page.id === activePageId));
     selection = null;
+    book.pageOrder = "manual";
     commitHistory();
     renderAll();
     const parentName = book.groups.find(group => group.id === nextParentId)?.name;
@@ -3402,6 +3458,7 @@
     if (afterState === beforeState) return false;
     currentIndex = Math.max(0, book.pages.findIndex(page => page.id === activePageId));
     selection = null;
+    book.pageOrder = "manual";
     commitHistory();
     renderAll();
     showToast(orderedIds.length > 1
@@ -3432,6 +3489,7 @@
     currentIndex = Math.max(0, book.pages.findIndex(page => page.id === activePageId));
     selection = null;
     if (clearSelection) orderedIds.forEach(pageId => selectedPageIds.delete(pageId));
+    book.pageOrder = "manual";
     commitHistory();
     renderAll();
     showToast(orderedIds.length > 1
@@ -3471,6 +3529,7 @@
     if (!book.pages.some(page => page.id === activePageId)) activePageId = movedPages[0].id;
     currentIndex = Math.max(0, book.pages.findIndex(page => page.id === activePageId));
     selection = null;
+    book.pageOrder = "manual";
     commitHistory();
     renderAll();
     showToast(orderedIds.length > 1
@@ -6371,7 +6430,6 @@
       selected?.placeholder || "현재 페이지에 기록할 내용을 입력하세요";
     refs.mobilePageWriteSubmit.textContent =
       selected?.submitLabel || "현재 페이지에 추가";
-    $("#mobileWritePlacementLabel").textContent = `${displayTitle} · ${selected?.label || "내용"}`;
     const widgetDateHint = mobileWriteDateContext
       ? `위젯에서 선택한 ${dailyDateLabel(dateFromIso(mobileWriteDateContext))}입니다. ○ 일정은 이 날짜에 저장됩니다. `
       : "";
@@ -6388,7 +6446,6 @@
     refs.mobileWriteOnceFields.hidden = mobileWriteMode === "routine";
     refs.mobileWriteRoutineFields.hidden = mobileWriteMode !== "routine";
     if (mobileWriteMode === "routine") {
-      $("#mobileWritePlacementLabel").textContent = "반복 루틴";
       refs.mobilePageWriteContentLabel.textContent = "루틴 이름";
       refs.mobilePageWriteInput.placeholder = "예: 만 보 걷기";
       refs.mobilePageWriteSubmit.textContent = "루틴 만들기";
@@ -6405,7 +6462,6 @@
 
   function openMobilePageWrite(options = {}) {
     mobileWriteDateContext = normalizedDateOrBlank(options?.date);
-    $("#mobileWritePlacement").open = false;
     const indexes = visibleIndexes();
     refs.mobilePageWritePageSelect.innerHTML = indexes.map(index => {
       const page = book.pages[index];
@@ -7007,6 +7063,9 @@
     if (!page) return;
     $("#notebookPageTitle").textContent = pageDisplayTitle(page);
     $("#notebookPath").textContent = groupPathForId(page.groupId).map(group => group.name).join(" › ") || "내 노트";
+    $("#journalPageOrder").value = book.pageOrder === "manual" ? "manual" : "hierarchy";
+    $("#journalToolsButton").setAttribute("aria-pressed", String(advancedMobileEditing));
+    $("#journalToolsButton").textContent = advancedMobileEditing ? "✎ 도구 닫기" : "✎ 편집 도구";
     const calendarOpen = $("#notebookCalendarDialog").open;
     const notesOpen = refs.sidebar.classList.contains("open");
     const todayOpen = !calendarOpen && !notesOpen && page.type === "daily" && page.pageDate === isoDate(new Date());
@@ -7063,12 +7122,20 @@
     refs.sidebar.inert = isAndroidApp;
     refs.spread.addEventListener("pointerdown", () => requestAnimationFrame(updateNotebookContext), true);
     $("#notebookLocation").addEventListener("click", toggleSidebar);
+    $("#journalToolsButton").addEventListener("click", toggleMobileAdvancedEditing);
+    $("#journalPageOrder").addEventListener("change", event => {
+      book.pageOrder = event.target.value === "manual" ? "manual" : "hierarchy";
+      commitHistory();
+      renderAll();
+      showToast(book.pageOrder === "hierarchy" ? "연간 → 월간 → 주간 → 일간 순서로 정리했습니다" : "직접 정한 페이지 순서를 유지합니다");
+    });
     $("#notebookSearchInput").addEventListener("input", renderNotebookSearch);
     $$('[data-notebook-panel]').forEach(button =>
       button.addEventListener("click", () => setNotebookPanel(button.dataset.notebookPanel))
     );
     const dialog = $("#notebookCalendarDialog");
     $("#notebookCalendarButton").addEventListener("click", () => {
+      refs.mobileMoreDialog.close();
       closeSidebar();
       const page = book.pages.find(item => item.id === activePageId);
       notebookCalendarDate = normalizedDateOrBlank(page?.pageDate) || isoDate(new Date());
@@ -7566,7 +7633,7 @@
     const weekResult = receiveMissionsForWeek(isoDate(mondayOf(today)));
     const extraAdded = materializeDueMissions();
     if (daily.created || result.added || weekResult.added || extraAdded) commitHistory();
-    currentIndex = daily.index;
+    currentIndex = book.pages.findIndex(page => page.id === daily.page.id);
     activePageId = daily.page.id;
     selection = null;
     if (refs.goalHubDialog.open) refs.goalHubDialog.close();
@@ -7589,7 +7656,7 @@
     const weekResult = receiveMissionsForWeek(isoDate(mondayOf(today)));
     const extraAdded = materializeDueMissions();
     if (daily.created || result.added || weekResult.added || extraAdded) commitHistory();
-    currentIndex = daily.index;
+    currentIndex = book.pages.findIndex(page => page.id === daily.page.id);
     activePageId = daily.page.id;
     selection = null;
     renderAll();
@@ -8986,6 +9053,7 @@
 
   function openSidebar() {
     refs.sidebar.inert = false;
+    $("#sidebarToggle").setAttribute("aria-expanded", "true");
     $("#notebookSearchInput").value = "";
     setNotebookPanel("pages");
     refs.sidebar.classList.add("open");
@@ -8996,6 +9064,7 @@
 
   function closeSidebar() {
     refs.sidebar.inert = isAndroidApp;
+    $("#sidebarToggle").setAttribute("aria-expanded", "false");
     refs.sidebar.classList.remove("open");
     refs.sidebarScrim.classList.remove("open");
     updateNotebookContext();
@@ -9417,6 +9486,7 @@
     refs.mobileSearchInput.addEventListener("input", renderMobileSearchResults);
     refs.mobileSearchCloseButton.addEventListener("click", () => refs.mobileSearchDialog.close());
     refs.mobileMoreButton.addEventListener("click", () => refs.mobileMoreDialog.showModal());
+    $("#mobileMoreNavButton").addEventListener("click", () => refs.mobileMoreDialog.showModal());
     refs.mobileMoreCloseButton.addEventListener("click", () => refs.mobileMoreDialog.close());
     refs.mobileAdvancedToggle.addEventListener("click", toggleMobileAdvancedEditing);
     refs.mobileSyncButton.addEventListener("click", () => {

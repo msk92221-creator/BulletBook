@@ -263,5 +263,6 @@ assert.match(source, /pruneEmptyBookGroups/u);
 assert.match(styles, /\.page-list-top-drop-zone/u);
 assert.match(source, /mobilePageWriteAddContinuationButton\.addEventListener/u);
 assert.match(styles, /\.mobile-bottom-nav small\s*\{[\s\S]*?white-space:\s*nowrap;/u);
-assert.match(styles, /\.page-write-nav-button small::after\s*\{[\s\S]*?content:\s*"페이지 쓰기";/u);
+assert.match(markup, /id="mobilePageWriteButton"[^>]*>[\s\S]*?<small>페이지 쓰기<\/small>/u);
+assert.doesNotMatch(styles, /\.page-write-nav-button small::after/u, "the visible label must not be repeated for screen readers");
 console.log("Mobile write sequential layout and continuation regression test passed.");
