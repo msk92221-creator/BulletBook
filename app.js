@@ -3136,6 +3136,7 @@
   }
 
   function clearPageListDropVisuals() {
+    stopPageListAutoScroll();
     $$(".page-item.page-reorder-source, .page-item.group-drop-after, .page-item.page-drop-before, .page-item.page-drop-after, .page-item.group-nest-page-target",
       refs.pageList).forEach(item => {
         item.classList.remove(
@@ -3152,19 +3153,27 @@
   }
 
   function pageListTargetAt(clientX, clientY) {
-    const candidates = $$(".page-item, .page-group-header, .page-list-top-drop-zone", refs.pageList);
-    let target = document.elementFromPoint?.(clientX, clientY)
+    const listRect = refs.pageList.getBoundingClientRect();
+    if (clientX < listRect.left || clientX > listRect.right || listRect.height <= 0) return null;
+    // 검색창 위까지 끌어도 화면 밖의 행이 아니라 목록의 보이는 가장자리를 가리킨다.
+    const targetY = clamp(clientY, listRect.top + 1, listRect.bottom - 1);
+    const candidates = $$(".page-item, .page-group-header, .page-list-top-drop-zone", refs.pageList)
+      .filter(item => {
+        const rect = item.getBoundingClientRect();
+        return rect.height > 0 && rect.bottom > listRect.top && rect.top < listRect.bottom;
+      });
+    let target = document.elementFromPoint?.(clientX, targetY)
       ?.closest?.(".page-item, .page-group-header, .page-list-top-drop-zone");
     if (target && refs.pageList.contains(target)) return target;
     target = candidates.find(item => {
       const rect = item.getBoundingClientRect();
-      return clientY >= rect.top && clientY <= rect.bottom;
+      return targetY >= rect.top && targetY <= rect.bottom;
     });
     if (target || !candidates.length) return target || null;
     const firstRect = candidates[0].getBoundingClientRect();
     const lastRect = candidates.at(-1).getBoundingClientRect();
-    if (clientY < firstRect.top) return candidates[0];
-    if (clientY > lastRect.bottom) return candidates.at(-1);
+    if (targetY < firstRect.top) return candidates[0];
+    if (targetY > lastRect.bottom) return candidates.at(-1);
     return null;
   }
 
@@ -3188,34 +3197,73 @@
   // 페이지·그룹을 끌어 옮길 때 목록 위/아래 가장자리에 닿으면 그 방향으로
   // 스크롤한다. 없으면 지금 화면에 보이는 범위 밖으로는 옮길 수가 없다.
   let pageListAutoScrollFrame = null;
-  let pageListAutoScrollSpeed = 0;
+  let pageListAutoScrollPointer = null;
+  let pageListAutoScrollTime = null;
 
   function stopPageListAutoScroll() {
     if (pageListAutoScrollFrame !== null) cancelAnimationFrame(pageListAutoScrollFrame);
     pageListAutoScrollFrame = null;
-    pageListAutoScrollSpeed = 0;
+    pageListAutoScrollPointer = null;
+    pageListAutoScrollTime = null;
   }
 
-  function updatePageListAutoScroll(clientY) {
+  function pageListAutoScrollSpeed(clientX, clientY) {
     const list = refs.pageList;
-    if (!list) return;
+    if (!list || list.scrollHeight <= list.clientHeight) return 0;
     const rect = list.getBoundingClientRect();
-    const zone = 72;
-    let speed = 0;
+    if (rect.height <= 0 || clientX < rect.left || clientX > rect.right) return 0;
+    const zone = Math.min(72, rect.height / 3);
     if (clientY < rect.top + zone) {
-      speed = -Math.min(22, Math.ceil((rect.top + zone - clientY) / 3));
-    } else if (clientY > rect.bottom - zone) {
-      speed = Math.min(22, Math.ceil((clientY - (rect.bottom - zone)) / 3));
+      return -Math.min(18, Math.ceil((rect.top + zone - clientY) / 3));
     }
-    pageListAutoScrollSpeed = speed;
-    if (!speed) return stopPageListAutoScroll();
+    if (clientY > rect.bottom - zone) {
+      return Math.min(18, Math.ceil((clientY - (rect.bottom - zone)) / 3));
+    }
+    return 0;
+  }
+
+  function updatePageListAutoScroll(clientX, clientY, updateDrop) {
+    if (!pageListAutoScrollSpeed(clientX, clientY)) return stopPageListAutoScroll();
+    pageListAutoScrollPointer = { clientX, clientY, updateDrop };
     if (pageListAutoScrollFrame !== null) return;
-    const step = () => {
-      if (!pageListAutoScrollSpeed) return stopPageListAutoScroll();
-      list.scrollTop += pageListAutoScrollSpeed;
+    const step = timestamp => {
+      pageListAutoScrollFrame = null;
+      const pointer = pageListAutoScrollPointer;
+      if (!pointer) return;
+      const speed = pageListAutoScrollSpeed(pointer.clientX, pointer.clientY);
+      if (!speed) return stopPageListAutoScroll();
+      const elapsed = pageListAutoScrollTime === null ? 1000 / 60 : Math.min(32, timestamp - pageListAutoScrollTime);
+      pageListAutoScrollTime = timestamp;
+      const list = refs.pageList;
+      const previousTop = list.scrollTop;
+      list.scrollTop = clamp(previousTop + speed * elapsed / (1000 / 60), 0, list.scrollHeight - list.clientHeight);
+      // 손가락이 멈춰 있어도 스크롤로 바뀐 행을 기준으로 드롭 표시를 갱신한다.
+      pointer.updateDrop?.();
+      if (list.scrollTop === previousTop) return stopPageListAutoScroll();
       pageListAutoScrollFrame = requestAnimationFrame(step);
     };
     pageListAutoScrollFrame = requestAnimationFrame(step);
+  }
+
+  function bindPageListDragScrolling() {
+    // Android WebView가 길게 누르기를 기본 HTML 드래그로 처리하는 경우도 포함한다.
+    // 행 사이의 여백이나 목록 위의 검색창에서도 가장자리 스크롤을 계속한다.
+    document.addEventListener("dragover", event => {
+      const state = pageListDragState;
+      if (!state) return;
+      const updateDrop = () => {
+        if (pageListDragState !== state) return;
+        state.drop = state.kind === "group"
+          ? groupListDropPosition(event.clientX, event.clientY, state.sourceId)
+          : pageListDropPosition(event.clientX, event.clientY, state.sourceIds || [state.sourceId]);
+      };
+      updateDrop();
+      updatePageListAutoScroll(event.clientX, event.clientY, updateDrop);
+      if (state.drop) event.preventDefault();
+    });
+    document.addEventListener("drop", stopPageListAutoScroll, true);
+    document.addEventListener("dragend", stopPageListAutoScroll, true);
+    window.addEventListener("blur", stopPageListAutoScroll);
   }
 
   function pageDragIdsForSource(sourceId) {
@@ -3328,7 +3376,7 @@
         const inMiddle = clientY > headerRect.top + edge &&
           clientY < headerRect.bottom - edge;
         const sourceGroup = book.groups.find(group => group.id === sourceGroupId);
-        if (sourceGroup?.parentId === targetGroupId && clientY <= headerRect.top + edge) {
+        if (sourceGroup?.parentId === targetGroupId) {
           target.classList.add("group-nest-target");
           return { nestIntoGroupId: targetGroupId, atStart: true };
         }
@@ -3576,7 +3624,7 @@
         .find(candidate => candidate.identifier === touchState.identifier) ||
         event.changedTouches?.[0];
       if (!cancelled && wasArmed && finalTouch) {
-        drop = groupListDropPosition(finalTouch.clientX, finalTouch.clientY, group.id) || drop;
+        drop = groupListDropPosition(finalTouch.clientX, finalTouch.clientY, group.id);
       }
       clearTimeout(longPressTimer);
       longPressTimer = null;
@@ -3632,10 +3680,11 @@
       }
       event.preventDefault();
       event.stopPropagation();
-      updatePageListAutoScroll(touch.clientY);
-      touchState.drop = groupListDropPosition(
-        touch.clientX, touch.clientY, group.id
-      );
+      const updateDrop = () => {
+        if (touchState?.armed) touchState.drop = groupListDropPosition(touch.clientX, touch.clientY, group.id);
+      };
+      updateDrop();
+      updatePageListAutoScroll(touch.clientX, touch.clientY, updateDrop);
     }, { passive: false });
 
     header.addEventListener("touchend", event => finishTouch(event), { passive: false });
@@ -3681,7 +3730,7 @@
         : pageListDropPosition(event.clientX, event.clientY, state.sourceIds || [state.sourceId]);
       pageListDragState = null;
       clearPageListDropVisuals();
-      applyPageListDragDrop(state, drop || state.drop);
+      applyPageListDragDrop(state, drop);
     });
     header.addEventListener("dragend", () => {
       pageListDragState = null;
@@ -3710,7 +3759,7 @@
         .find(candidate => candidate.identifier === touchState.identifier) ||
         event.changedTouches?.[0];
       if (!cancelled && wasArmed && finalTouch) {
-        drop = pageListDropPosition(finalTouch.clientX, finalTouch.clientY, sourceIds) || drop;
+        drop = pageListDropPosition(finalTouch.clientX, finalTouch.clientY, sourceIds);
       }
       clearTimeout(longPressTimer);
       longPressTimer = null;
@@ -3768,10 +3817,11 @@
       }
       event.preventDefault();
       event.stopPropagation();
-      updatePageListAutoScroll(touch.clientY);
-      touchState.drop = pageListDropPosition(
-        touch.clientX, touch.clientY, touchState.sourceIds || [page.id]
-      );
+      const updateDrop = () => {
+        if (touchState?.armed) touchState.drop = pageListDropPosition(touch.clientX, touch.clientY, touchState.sourceIds || [page.id]);
+      };
+      updateDrop();
+      updatePageListAutoScroll(touch.clientX, touch.clientY, updateDrop);
     }, { passive: false });
 
     item.addEventListener("touchend", event => finishTouch(event), { passive: false });
@@ -3813,7 +3863,7 @@
         : pageListDropPosition(event.clientX, event.clientY, state.sourceIds || [state.sourceId]);
       pageListDragState = null;
       clearPageListDropVisuals();
-      applyPageListDragDrop(state, drop || state.drop);
+      applyPageListDragDrop(state, drop);
     });
     item.addEventListener("dragend", () => {
       pageListDragState = null;
@@ -9253,6 +9303,7 @@
   }
 
   function closeSidebar() {
+    stopPageListAutoScroll();
     refs.sidebar.inert = isAndroidApp;
     $("#sidebarToggle").setAttribute("aria-expanded", "false");
     refs.sidebar.classList.remove("open");
@@ -9524,6 +9575,7 @@
 
   function bindEvents() {
     bindPageListResizer();
+    bindPageListDragScrolling();
     $$(".tool").forEach(button => button.addEventListener("click", () => setTool(button.dataset.tool)));
     $$('[data-bullet-base], [data-bullet-status]').forEach(button => {
       // 마우스로 불렛을 누를 때 현재 글자 커서가 버튼으로 이동하지 않게 한다.
