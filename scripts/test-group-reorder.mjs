@@ -124,4 +124,25 @@ assert.deepEqual(
 assert.equal(context.book.pages[1].elements[0].text, "목차");
 assert.equal(context.book.pages[2].elements[0].text, "기호");
 assert.equal(context.selectedPageIds.size, 0);
-console.log("Nested group page ordering: ok");
+// Move the user's annual group above all year pages, preserving all five records.
+context.book = makeBook();
+context.book.pageOrder = "hierarchy";
+context.book.groups.push({ id: "annual", name: "연간계획", kind: "custom", parentId: "year" });
+const annualPages = Array.from({ length: 5 }, (_, index) => ({
+  id: `annual-note-${index}`, type: "blank", groupId: "annual", pageDate: "2026-01-01",
+  elements: [{ text: `Saved annual note ${index}` }],
+}));
+context.book.pages.push(...annualPages);
+const records = JSON.stringify(annualPages);
+context.commitHistory = () => {
+  context.book.pages = context.normalizeGroupPageOrder(context.book.pages, context.book.groups, context.book.pageOrder !== "manual");
+};
+assert.equal(context.reorderGroupFromList("annual", { nestIntoGroupId: "year", atStart: true }), true);
+assert.equal(context.book.pageOrder, "manual");
+assert.deepEqual([...context.book.pages].slice(1, 6).map(page => page.id), annualPages.map(page => page.id));
+assert.equal(JSON.stringify(annualPages), records);
+const savedOrder = [...context.book.pages].map(page => page.id);
+context.book = JSON.parse(JSON.stringify(context.book));
+context.commitHistory();
+assert.deepEqual([...context.book.pages].map(page => page.id), savedOrder, "manual annual group position survives reopening");
+console.log("Nested group ordering, annual group at year start and saved records: ok");
