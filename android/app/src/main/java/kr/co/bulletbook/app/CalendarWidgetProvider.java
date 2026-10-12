@@ -218,6 +218,15 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
                 more.setContentDescription(R.id.widget_overflow_text,date+" · 숨겨진 일정 "+overflow[day]+"개");
                 more.setOnClickPendingIntent(R.id.widget_overflow_text,datePendingIntent(context,date));
                 row.addView(R.id.widget_week_overflow,more);
+                // One transparent target per full date column: a tap in the middle of
+                // a spanning bar must open the tapped date, not the start of its week.
+                int total=0;
+                for(WidgetEventLayout.Segment segment:segments)if(segment.start<=day&&segment.end>=day)total++;
+                if(local!=null)total+=Math.max(0,local.open+local.completed+local.migrated+local.scheduled-local.items.size());
+                RemoteViews target=new RemoteViews(context.getPackageName(),R.layout.widget_day_target);
+                target.setContentDescription(R.id.widget_day_target,date+" · 일정 "+total+"개 · 전체 내역 보기");
+                target.setOnClickPendingIntent(R.id.widget_day_target,datePendingIntent(context,date));
+                row.addView(R.id.widget_week_taps,target);
             }
             views.addView(R.id.widget_date_grid, row);
         }
