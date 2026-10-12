@@ -114,7 +114,8 @@ export function startConnection(){
     }
     if(message.type==='open-date'){
       (window as any).__bulletbookDate=message.date;
-      window.dispatchEvent(new CustomEvent('bulletbook-date',{detail:message.date}));
+      (window as any).__bulletbookShowDetails=message.showDetails!==false;
+      window.dispatchEvent(new CustomEvent('bulletbook-date',{detail:{date:message.date,showDetails:message.showDetails!==false}}));
     }
     if(message.type==='backup-error')status('자동 백업을 저장하지 못했습니다. 저장 공간을 확인해 주세요.');
   });

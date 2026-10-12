@@ -6,6 +6,7 @@ import { dateKey, parseDate, addDays, monthGrid, expandEvents, weekLanes, newEve
 import { auth, configured, login, logout, emailLogin, resetPassword, createFamily, joinFamily, findFamily, listenFamily, createInvite, saveCloudEvent, deleteCloudEvent, saveCloudCategory, friendlyError, type Family } from './firebase';
 import { DatePicker } from './DatePicker';
 import { CategoryManager } from './CategoryManager';
+import { DayAgenda, dayAgendaEvents } from './DayAgenda';
 
 const WEEKDAYS=['일','월','화','수','목','금','토'];
 const DEMO_KEY='familyteamroom:demo:v1';
@@ -89,10 +90,11 @@ export default function App(){
   const appearance=(id:string)=>categoryAppearance(categories,id);
   const today=dateKey(new Date()),uid=demo?'me':user?.uid??'';
   const [month,setMonth]=useState(()=>parseDate(today)),[selected,setSelected]=useState(today),[view,setView]=useState<'month'|'list'>('month');
+  const [detailDay,setDetailDay]=useState<string|null>(null);
   useEffect(()=>{
-    const open=(value:string)=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return;setSelected(value);setMonth(parseDate(value));setView('month');};
-    const receive=(e:Event)=>open((e as CustomEvent).detail);
-    open((window as any).__bulletbookDate);
+    const open=(value:string,showDetails=true)=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(value||'')||dateKey(parseDate(value))!==value)return;setSelected(value);setMonth(parseDate(value));setView('month');setDetailDay(showDetails?value:null);};
+    const receive=(e:Event)=>{const detail=(e as CustomEvent).detail;open(typeof detail==='string'?detail:detail?.date,detail?.showDetails!==false);};
+    open((window as any).__bulletbookDate,(window as any).__bulletbookShowDetails!==false);
     window.addEventListener('bulletbook-date',receive);
     return()=>window.removeEventListener('bulletbook-date',receive);
   },[]);
@@ -105,6 +107,7 @@ export default function App(){
   const visibleEvents=useMemo(()=>events.filter(e=>(filter==='all'||e.participants.includes(filter))&&(!query||`${e.title} ${e.location} ${e.notes}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()))),[events,filter,query]);
   const occurrences=useMemo(()=>expandEvents(visibleEvents,days[0],days[days.length-1]),[visibleEvents,days]);
   const selectedEvents=occurrences.filter(e=>e.startDate<=selected&&e.endDate>=selected);
+  const detailEvents=useMemo(()=>detailDay?dayAgendaEvents(events,detailDay):[],[events,detailDay]);
   const upcoming=useMemo(()=>expandEvents(visibleEvents,today,addDays(today,30)).filter(e=>e.endDate>=today).slice(0,4),[visibleEvents,today]);
   const monthEvents=occurrences.filter(e=>e.startDate<=dateKey(new Date(month.getFullYear(),month.getMonth()+1,0,12))&&e.endDate>=dateKey(new Date(month.getFullYear(),month.getMonth(),1,12)));
   const currentMember=members.find(m=>m.id===uid)??{id:uid,name:user?.displayName||'나',color:'#4555ce'};
@@ -155,7 +158,7 @@ export default function App(){
             const week=days.slice(w*7,w*7+7),lanes=weekLanes(occurrences,week),maxLanes=4;
             return <div className="calendar-week" key={week[0]}><div className="day-cells">{week.map((day,i)=>{
               const overflow=lanes.filter(l=>l.lane>=maxLanes&&l.start<=i&&l.end>=i).length;
-              return <button key={day} aria-label={`${longDate(day)} 일정 보기`} aria-pressed={selected===day} className={`day-cell ${parseDate(day).getMonth()!==month.getMonth()?'outside':''} ${day===selected?'selected-day':''} ${i===0?'sunday':i===6?'saturday':''}`} onClick={()=>setSelected(day)} onDoubleClick={()=>setEditor(newEvent(day,uid))}><span className={`day-number ${day===today?'today':''}`}>{parseDate(day).getDate()}</span>{overflow>0&&<span className="overflow-count">+{overflow}개 더 보기</span>}</button>;
+              return <button key={day} aria-label={`${longDate(day)} 일정 보기`} aria-pressed={selected===day} className={`day-cell ${parseDate(day).getMonth()!==month.getMonth()?'outside':''} ${day===selected?'selected-day':''} ${i===0?'sunday':i===6?'saturday':''}`} onClick={()=>{setSelected(day);setDetailDay(day);}}><span className={`day-number ${day===today?'today':''}`}>{parseDate(day).getDate()}</span>{overflow>0&&<span className="overflow-count">+{overflow}개 더 보기</span>}</button>;
             })}</div><div className="week-events">{lanes.filter(l=>l.lane<maxLanes).map(({event,start,end,lane})=>{
               const c=appearance(event.category),isSpan=event.startDate!==event.endDate;
               return <button key={event.occurrenceId} className={`calendar-event ${isSpan?'spanning':''} ${event.allDay?'all-day':''}`} style={{gridColumn:`${start+1} / ${end+2}`,gridRow:lane+1,'--event-color':c.color,'--event-bg':c.bg} as CSSProperties} onClick={()=>openEvent(event)} title={`${event.title}${event.allDay?'':` · ${event.startTime}`}`}><span className="calendar-event-content">{!event.allDay&&!isSpan&&<i/>}{event.isPrivate&&<LockKeyhole size={10}/>}<span>{event.title}</span>{!event.allDay&&!isSpan&&<small>{event.startTime}</small>}</span></button>;
@@ -166,6 +169,7 @@ export default function App(){
         <aside className="day-panel"><section className="selected-agenda"><div className="day-heading"><div><p>{selected===today?'TODAY':'SCHEDULE'}</p><h3>{longDate(selected)}</h3></div><button className="icon-button add-day" aria-label="선택한 날짜에 일정 추가" onClick={()=>setEditor(newEvent(selected,uid))}><Plus size={20}/></button></div>{selectedEvents.length?selectedEvents.map(eventCard):<div className="empty-agenda"><CalendarDays size={30}/><p>아직 일정이 없어요</p><button className="text-button" onClick={()=>setEditor(newEvent(selected,uid))}>새 일정 추가하기</button></div>}</section><section className="upcoming"><div className="upcoming-heading"><h3>다가오는 일정</h3><span>30일 이내</span></div>{upcoming.length?upcoming.map(e=><button className="upcoming-event" key={e.occurrenceId} onClick={()=>{setMonth(parseDate(e.startDate));setSelected(e.startDate);openEvent(e);}}><div className="upcoming-date"><small>{parseDate(e.startDate).getMonth()+1}월</small><strong>{parseDate(e.startDate).getDate()}</strong></div><div><strong>{e.title}</strong><small>{e.allDay?'종일':e.startTime} · {appearance(e.category).label}</small></div></button>):<p className="muted">예정된 일정이 없어요.</p>}</section><div className="family-note"><Heart size={16}/><p>작은 약속도, 특별한 날도<br/>우리 가족 달력에 함께 담아요.</p></div></aside></div>
       </main><button className="mobile-fab" aria-label="새 일정 만들기" onClick={()=>setEditor(newEvent(selected,uid))}><Plus size={27}/></button>
     </div>
+    {detailDay&&!editor&&<Modal title={`${longDate(detailDay)} 일정`} onClose={()=>setDetailDay(null)}><div role="status">{syncError&&<p className="form-error">{syncError}</p>}</div><DayAgenda day={detailDay} events={detailEvents} categories={categories} members={members} onOpen={openEvent} onAdd={()=>setEditor(newEvent(detailDay,uid))}/></Modal>}
     {editor&&<EventEditor key={editor.id} event={editor} existing={events.some(e=>e.id===editor.id)} members={members} categories={categories} uid={uid} onManageCategories={()=>setCategoriesOpen(true)} onSave={save} onDelete={remove} onClose={()=>setEditor(null)}/>}
     {inviteOpen&&<Modal title="가족 초대" onClose={()=>setInviteOpen(false)}><div className="settings-content"><div className="invite-illustration"><Users size={30}/></div>{demo?<><h3>우리 가족만의 달력을 시작해요</h3><p>로그인하고 가족 달력을 만들면 웹과 앱에서 같은 일정을 함께 볼 수 있어요.</p><button className="button primary full" onClick={leaveDemo}>로그인하고 시작하기</button></>:family?.ownerId!==uid?<p>가족 달력을 만든 분에게 새 초대 코드를 요청해 주세요.</p>:<><p>가족 한 명에게 초대 코드를 전달해 주세요. 코드는 <strong>24시간 동안, 한 번만</strong> 사용할 수 있어요.</p>{inviteCode?<><label>초대 코드<div className="copy-field"><input aria-label="초대 코드" readOnly value={inviteCode}/><button className="icon-button" aria-label="초대 코드 복사" onClick={async()=>{try{await navigator.clipboard.writeText(inviteCode);setToast('초대 코드를 복사했어요.');}catch{setInviteError('코드를 길게 눌러 직접 복사해 주세요.');}}}><Copy size={18}/></button></div></label><p className="field-hint">가족이 로그인한 뒤 ‘초대로 참여’에 입력하면 돼요.</p></>:null}{inviteError&&<p className="form-error" role="alert">{inviteError}</p>}<button className="button primary full" disabled={inviteBusy} onClick={async()=>{if(!family)return;setInviteBusy(true);setInviteError('');try{setInviteCode(await createInvite(family,uid));}catch(e){setInviteError(friendlyError(e));}finally{setInviteBusy(false);}}}>{inviteBusy?<Spinner/>:<UserPlus size={17}/>} {inviteCode?'다른 가족을 위한 코드 만들기':'초대 코드 만들기'}</button></>}</div></Modal>}
     {settings&&<Modal title="설정" onClose={()=>setSettings(false)}><div className="settings-content"><div className="settings-profile"><Avatar member={currentMember}/><div><h3>{currentMember.name}</h3><p>{demo?'예시 달력을 이용 중이에요':user?.email}</p></div></div><div className="settings-row"><span>캘린더</span><strong>{demo?'우리집 팀룸':family?.name}</strong></div><button className="settings-category-button" onClick={()=>setCategoriesOpen(true)}><span><CalendarDays size={18}/>분류 관리</span><small>추가·이름·색상·삭제</small><ChevronRight size={17}/></button><div className="settings-row"><span>저장 위치</span><strong>{demo?'이 기기 · 체험용':'가족 공유 · Firebase'}</strong></div><p className="field-hint">{demo?'예시 일정과 변경 내용은 가족에게 공유되지 않아요. 실제 일정은 로그인 후 등록해 주세요.':'공유 일정은 모든 가족이 수정할 수 있어요. 나만 보는 일정은 본인만 읽고 수정할 수 있어요.'}</p><button className="button full" onClick={async()=>{if(demo){leaveDemo();return;}try{await logout();setSettings(false);setEvents([]);setMembers([]);}catch(e){setToast(friendlyError(e));}}}><LogOut size={17}/>{demo?'체험 끝내고 로그인':'로그아웃'}</button></div></Modal>}

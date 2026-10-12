@@ -9,7 +9,7 @@
       frame.title = '패밀리팀룸 가족 달력';
       frame.src = 'family-room/index.html';
       dialog.append(frame); document.body.append(dialog);
-      let scope = '', days = {}, linked = new Set(), deleted = new Set(), pendingDate = '';
+      let scope = '', days = {}, linked = new Set(), deleted = new Set(), pendingDate = '', pendingDetails = true;
       let lastExport = '', exportGeneration = 0, bindingTimer = null, accountGeneration = 0, activeBookId = '', projectionSignature = '';
       let nativeSequence = 0;
       const post = message => frame.contentWindow?.postMessage({channel:'bulletbook-family-v1',...message},location.origin);
@@ -31,7 +31,7 @@
         if (event.source !== frame.contentWindow || event.origin !== location.origin || event.data?.channel !== 'bulletbook-family-v1') return;
         const message = event.data;
         if (message.type === 'close') { dialog.close(); return; }
-        if (message.type === 'loaded') { if(pendingDate)post({type:'open-date',date:pendingDate}); return; }
+        if (message.type === 'loaded') { if(pendingDate)post({type:'open-date',date:pendingDate,showDetails:pendingDetails}); return; }
         if (message.type === 'disconnected' || (message.type === 'account' && scope && scope.split(':')[0]!==message.uid)) {
           scope='';days={};linked.clear();deleted.clear();lastExport='';exportGeneration++;accountGeneration++;projectionSignature='';
           clearTimeout(bindingTimer);native({disconnected:true});options.changed();return;
@@ -54,10 +54,10 @@
         }
         if (message.type === 'native-session' && scope && message.session.uid+':'+message.session.familyId === scope) native(message);
       });
-      frame.addEventListener('load',()=>{if(pendingDate)post({type:'open-date',date:pendingDate});});
+      frame.addEventListener('load',()=>{if(pendingDate)post({type:'open-date',date:pendingDate,showDetails:pendingDetails});});
       dialog.addEventListener?.('close',()=>options.changed());
       return {
-        open(date) { pendingDate=date; if(!dialog.open)dialog.showModal();post({type:'open-date',date}); },
+        open(date,showDetails=true) { pendingDate=date;pendingDetails=showDetails; if(!dialog.open)dialog.showModal();post({type:'open-date',date,showDetails}); },
         close() { if(dialog.open)dialog.close(); },
         isOpen:()=>dialog.open,
         isConnected:()=>!!scope,

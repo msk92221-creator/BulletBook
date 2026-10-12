@@ -25,6 +25,7 @@ Run 'git' @('diff','--quiet','HEAD')
 $commit=(& git rev-parse HEAD).Trim()
 if($LASTEXITCODE -ne 0){throw 'Cannot determine source commit'}
 Run 'npm.cmd' @('ci')
+Run 'npm.cmd' @('run','test:day-agenda')
 Run 'npm.cmd' @('run','test:family')
 Run 'npm.cmd' @('run','test:family-connection')
 Run 'npm.cmd' @('run','test:widget-snapshot')

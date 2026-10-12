@@ -10053,7 +10053,7 @@
     window.__bulletBookOpenWidgetMonth = value => {
       const match = /^(\d{4})-(\d{1,2})$/.exec(String(value || ""));
       if (!match) return false;
-      if (familyCalendar) { familyCalendar.open(`${match[1]}-${String(Number(match[2])).padStart(2,"0")}-01`); return true; }
+      if (familyCalendar) { familyCalendar.open(`${match[1]}-${String(Number(match[2])).padStart(2,"0")}-01`, false); return true; }
       const year = Number(match[1]);
       const month = Number(match[2]);
       const page = book.pages.find(candidate => candidate.type === "monthly" && (() => {

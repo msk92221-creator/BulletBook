@@ -26,6 +26,7 @@ jobs:
       - run: npm ci
       - name: Calendar regression checks
         run: |
+          npm run test:day-agenda
           npm run test:family
           npm run test:family-connection
           npm run test:widget-snapshot
