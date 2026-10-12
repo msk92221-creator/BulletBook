@@ -32,6 +32,12 @@ public class WidgetEventLayoutTest {
         assertEquals(0,segments.get(0).lane);assertEquals(1,segments.get(1).lane);assertEquals(1,segments.get(2).lane);
         assertArrayEquals(new int[]{0,1,1,1,1,1,1},WidgetEventLayout.overflow(segments,1));
     }
+    @Test public void resizeLeavesRoomForDateAndOverflowAtLargeFontSizes() {
+        assertEquals(1,WidgetEventLayout.visibleLanes(320,1));
+        assertEquals(3,WidgetEventLayout.visibleLanes(500,1));
+        assertEquals(4,WidgetEventLayout.visibleLanes(900,1));
+        assertEquals(0,WidgetEventLayout.visibleLanes(320,2));
+    }
     @Test public void equalTitlesOnAdjacentDaysStaySeparate() {
         List<WidgetEventLayout.Segment> segments=WidgetEventLayout.week(Arrays.asList(
             event("a","2026-10-19","2026-10-19"),event("b","2026-10-20","2026-10-20")),day("2026-10-18"));

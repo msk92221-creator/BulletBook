@@ -68,6 +68,10 @@ final class WidgetEventLayout {
         for(int day=start;day<=end;day++)if(row[day])return true;
         return false;
     }
+    static int visibleLanes(int widgetHeight,float fontScale) {
+        float scale=Math.max(1f,fontScale);
+        return Math.max(0,Math.min(4,(int)(((widgetHeight-88)/6f-24*scale)/(12*scale))));
+    }
     static int[] overflow(List<Segment> segments,int visibleLanes) {
         int[] counts=new int[7];
         for(Segment s:segments)if(s.lane>=visibleLanes)for(int day=s.start;day<=s.end;day++)counts[day]++;

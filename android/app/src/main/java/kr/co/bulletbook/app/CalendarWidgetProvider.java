@@ -142,7 +142,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         // Reserve header, date and overflow lines; adapt to resize and system font scaling.
         int height=manager.getAppWidgetOptions(widgetId).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT,320);
         float fontScale=context.getResources().getConfiguration().fontScale;
-        int visibleLanes=Math.max(1,Math.min(4,(int)(((height-92)/6f-18*fontScale-12*fontScale)/(14*fontScale))));
+        int visibleLanes=WidgetEventLayout.visibleLanes(height,fontScale);
 
         views.setTextViewText(R.id.widget_month_label, month.format(MONTH_LABEL));
         views.setOnClickPendingIntent(

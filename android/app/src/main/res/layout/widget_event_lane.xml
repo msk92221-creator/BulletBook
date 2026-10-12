@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
- android:id="@+id/widget_event_lane" android:layout_width="match_parent" android:layout_height="14sp"
+ android:id="@+id/widget_event_lane" android:layout_width="match_parent" android:layout_height="12sp"
  android:orientation="horizontal" android:weightSum="7"/>
