@@ -37,6 +37,7 @@
              SharedPreferences("bulletbook_cloud")의 calendar_widget_v1_json에서 읽는다. -->
         <receiver
             android:name=".CalendarWidgetProvider"
+            android:label="@string/widget_calendar_label"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

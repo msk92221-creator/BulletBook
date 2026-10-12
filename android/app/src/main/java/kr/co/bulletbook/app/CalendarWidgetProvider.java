@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -95,6 +96,11 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
     }
 
     @Override
+    public void onAppWidgetOptionsChanged(Context context,AppWidgetManager manager,int id,Bundle options) {
+        renderWidget(context,manager,id);
+    }
+
+    @Override
     public void onDeleted(Context context, int[] appWidgetIds) {
         SharedPreferences.Editor editor =
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit();
@@ -133,6 +139,10 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         YearMonth month = loadDisplayedMonth(context, widgetId, currentMonth);
         List<LocalDate> gridDates = visibleDates(month);
         DayCounts counts = loadSnapshot(context, gridDates.get(0), gridDates.get(41));
+        // Reserve header, date and overflow lines; adapt to resize and system font scaling.
+        int height=manager.getAppWidgetOptions(widgetId).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT,320);
+        float fontScale=context.getResources().getConfiguration().fontScale;
+        int visibleLanes=WidgetEventLayout.visibleLanes(height,fontScale);
 
         views.setTextViewText(R.id.widget_month_label, month.format(MONTH_LABEL));
         views.setOnClickPendingIntent(
@@ -158,8 +168,10 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         List<LocalDate> dates = visibleDates(month);
         for (int week = 0; week < 6; week++) {
             RemoteViews row = new RemoteViews(
-                context.getPackageName(), R.layout.widget_calendar_row
+                context.getPackageName(), R.layout.widget_calendar_week
             );
+            LocalDate weekStart=dates.get(week*7);
+            List<WidgetEventLayout.Event> weekEvents=new ArrayList<>(counts.events);
             for (int weekday = 0; weekday < 7; weekday++) {
                 LocalDate date = dates.get(week * 7 + weekday);
                 String iso = date.format(ISO);
@@ -168,12 +180,53 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
                     date,
                     YearMonth.from(date).equals(month),
                     date.isEqual(today),
-                    counts.days.get(iso)
+                    null
                 );
                 cell.setOnClickPendingIntent(
                     R.id.widget_cell_root, datePendingIntent(context, date)
                 );
-                row.addView(R.id.widget_calendar_row, cell);
+                row.addView(R.id.widget_week_dates, cell);
+                // Old notebook entries have no interval identity: keep them as individual days.
+                DayCount local=counts.days.get(iso);
+                if(local!=null)for(int index=0;index<local.items.size();index++) {
+                    weekEvents.add(new WidgetEventLayout.Event("local:"+iso+":"+index,
+                        local.items.get(index),local.colors.get(index),date,date));
+                }
+            }
+            List<WidgetEventLayout.Segment> segments=WidgetEventLayout.week(weekEvents,weekStart);
+            for(int lane=0;lane<visibleLanes;lane++) {
+                RemoteViews line=new RemoteViews(context.getPackageName(),R.layout.widget_event_lane);
+                int cursor=0;
+                List<WidgetEventLayout.Segment> ordered=new ArrayList<>();
+                for(WidgetEventLayout.Segment s:segments)if(s.lane==lane)ordered.add(s);
+                ordered.sort(java.util.Comparator.comparingInt(s->s.start));
+                for(WidgetEventLayout.Segment s:ordered) {
+                    if(s.start>cursor)line.addView(R.id.widget_event_lane,eventBar(context,s.start-cursor,null,weekStart));
+                    line.addView(R.id.widget_event_lane,eventBar(context,s.end-s.start+1,s,weekStart));
+                    cursor=s.end+1;
+                }
+                if(cursor<7)line.addView(R.id.widget_event_lane,eventBar(context,7-cursor,null,weekStart));
+                row.addView(R.id.widget_week_lanes,line);
+            }
+            int[] overflow=WidgetEventLayout.overflow(segments,visibleLanes);
+            for(int day=0;day<7;day++) {
+                LocalDate date=weekStart.plusDays(day);
+                DayCount local=counts.days.get(date.toString());
+                if(local!=null)overflow[day]+=Math.max(0,local.open+local.completed+local.migrated+local.scheduled-local.items.size());
+                RemoteViews more=new RemoteViews(context.getPackageName(),R.layout.widget_overflow_cell);
+                more.setTextViewText(R.id.widget_overflow_text,overflow[day]>0?"+"+overflow[day]:"");
+                more.setContentDescription(R.id.widget_overflow_text,date+" · 숨겨진 일정 "+overflow[day]+"개");
+                more.setOnClickPendingIntent(R.id.widget_overflow_text,datePendingIntent(context,date));
+                row.addView(R.id.widget_week_overflow,more);
+                // One transparent target per full date column: a tap in the middle of
+                // a spanning bar must open the tapped date, not the start of its week.
+                int total=0;
+                for(WidgetEventLayout.Segment segment:segments)if(segment.start<=day&&segment.end>=day)total++;
+                if(local!=null)total+=Math.max(0,local.open+local.completed+local.migrated+local.scheduled-local.items.size());
+                RemoteViews target=new RemoteViews(context.getPackageName(),R.layout.widget_day_target);
+                target.setContentDescription(R.id.widget_day_target,date+" · 일정 "+total+"개 · 전체 내역 보기");
+                target.setOnClickPendingIntent(R.id.widget_day_target,datePendingIntent(context,date));
+                row.addView(R.id.widget_week_taps,target);
             }
             views.addView(R.id.widget_date_grid, row);
         }
@@ -206,6 +259,26 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         }
 
         manager.updateAppWidget(widgetId, views);
+    }
+
+    private static final int[] BAR_LAYOUTS={R.layout.widget_event_bar_1,R.layout.widget_event_bar_2,
+        R.layout.widget_event_bar_3,R.layout.widget_event_bar_4,R.layout.widget_event_bar_5,
+        R.layout.widget_event_bar_6,R.layout.widget_event_bar_7};
+    private static RemoteViews eventBar(Context context,int columns,WidgetEventLayout.Segment segment,LocalDate week) {
+        RemoteViews bar=new RemoteViews(context.getPackageName(),BAR_LAYOUTS[columns-1]);
+        if(segment==null) {
+            bar.setViewVisibility(R.id.widget_event_text,View.INVISIBLE);
+            return bar;
+        }
+        int color;
+        try{color=Color.parseColor(segment.event.color);}catch(Exception ignored){color=Color.parseColor("#737b8c");}
+        bar.setInt(R.id.widget_event_text,"setBackgroundColor",color);
+        bar.setTextColor(R.id.widget_event_text,Color.WHITE);
+        bar.setTextViewText(R.id.widget_event_text,(segment.continuesBefore?"‹ ":"")+segment.event.title+(segment.continuesAfter?" ›":""));
+        bar.setContentDescription(R.id.widget_event_text,segment.event.title+", "+segment.event.start+"부터 "+segment.event.end+"까지"
+            +(segment.continuesBefore?", 이전 주에서 이어짐":"")+(segment.continuesAfter?", 다음 주로 이어짐":""));
+        bar.setOnClickPendingIntent(R.id.widget_event_text,datePendingIntent(context,week.plusDays(segment.start)));
+        return bar;
     }
 
     static YearMonth shiftMonth(YearMonth month, int offset) {
@@ -359,10 +432,10 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         DayCounts result = new DayCounts();
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String json = prefs.getString(SNAPSHOT_KEY, "");
-        if (json == null || json.isEmpty()) return result;
         try {
-            JSONObject root = new JSONObject(json);
-            JSONObject days = FamilyCalendarStore.widgetDays(context,root,from,to);
+            JSONObject root = new JSONObject(json==null||json.isEmpty()?"{}":json);
+            result.events.addAll(FamilyCalendarStore.widgetEvents(context,from,to));
+            JSONObject days = FamilyCalendarStore.widgetLocalDays(context,root);
             if (days == null) return result;
             for (java.util.Iterator<String> it = days.keys(); it.hasNext(); ) {
                 String key = it.next();
@@ -425,6 +498,7 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
 
     static final class DayCounts {
         final Map<String, DayCount> days = new HashMap<>();
+        final List<WidgetEventLayout.Event> events = new ArrayList<>();
     }
 
     static final class DayCount {

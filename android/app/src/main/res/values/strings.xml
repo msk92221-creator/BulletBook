@@ -5,4 +5,5 @@
     <string name="package_name">kr.co.bulletbook.next</string>
     <string name="custom_url_scheme">kr.co.bulletbook.next</string>
     <string name="widget_calendar_description">BulletBook 새버전의 이번 달 일정 달력</string>
+    <string name="widget_calendar_label">가족 달력 · 기간 막대</string>
 </resources>
