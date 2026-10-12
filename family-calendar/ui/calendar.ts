@@ -17,7 +17,7 @@ export const CATEGORIES: Record<Category, {label:string;color:string;bg:string}>
   anniversary: {label:'기념일',color:'#b37419',bg:'#fff3d6'},
 };
 export const UNCATEGORIZED = {id:'uncategorized',label:'미분류',color:'#737b8c',bg:'#eef0f4',deleted:false};
-export const CATEGORY_COLORS = ['#4555ce','#8260be','#257763','#bb5b3e','#b37419','#be517d','#327fba','#737b8c'];
+export { CATEGORY_COLORS } from './color-palette';
 // Overrides include tombstones so deleting a default never restores it on another device.
 export function activeCategories(overrides:EventCategory[]):EventCategory[] {
   const categories=new Map(Object.entries(CATEGORIES).map(([id,c])=>[id,{id,label:c.label,color:c.color,deleted:false}]));

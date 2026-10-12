@@ -273,12 +273,23 @@ public class CalendarWidgetProvider extends AppWidgetProvider {
         int color;
         try{color=Color.parseColor(segment.event.color);}catch(Exception ignored){color=Color.parseColor("#737b8c");}
         bar.setInt(R.id.widget_event_text,"setBackgroundColor",color);
-        bar.setTextColor(R.id.widget_event_text,Color.WHITE);
+        bar.setTextColor(R.id.widget_event_text,barTextColor(color));
         bar.setTextViewText(R.id.widget_event_text,(segment.continuesBefore?"‹ ":"")+segment.event.title+(segment.continuesAfter?" ›":""));
         bar.setContentDescription(R.id.widget_event_text,segment.event.title+", "+segment.event.start+"부터 "+segment.event.end+"까지"
             +(segment.continuesBefore?", 이전 주에서 이어짐":"")+(segment.continuesAfter?", 다음 주로 이어짐":""));
         bar.setOnClickPendingIntent(R.id.widget_event_text,datePendingIntent(context,week.plusDays(segment.start)));
         return bar;
+    }
+
+    // Match the web calendar: choose the higher WCAG contrast on each solid bar.
+    static int barTextColor(int color) {
+        double[] channels = {(color >> 16 & 255) / 255.0, (color >> 8 & 255) / 255.0, (color & 255) / 255.0};
+        for (int i = 0; i < channels.length; i++) {
+            double v = channels[i];
+            channels[i] = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        }
+        double luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+        return luminance > 0.179128784747792 ? 0xff000000 : 0xffffffff;
     }
 
     static YearMonth shiftMonth(YearMonth month, int offset) {

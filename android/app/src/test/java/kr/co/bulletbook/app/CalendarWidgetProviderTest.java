@@ -11,6 +11,15 @@ import java.util.List;
 public class CalendarWidgetProviderTest {
 
     @Test
+    public void brightAndDarkBarsUseReadableText() {
+        assertEquals(0xff000000, CalendarWidgetProvider.barTextColor(0xfffacc15));
+        assertEquals(0xff000000, CalendarWidgetProvider.barTextColor(0xff22c55e));
+        assertEquals(0xffffffff, CalendarWidgetProvider.barTextColor(0xff1d4ed8));
+        assertEquals(0xffffffff, CalendarWidgetProvider.barTextColor(0xff1f2937));
+        assertEquals(0xffffffff, CalendarWidgetProvider.barTextColor(0xff4555ce));
+    }
+
+    @Test
     public void visibleMonthMatchesFamilyCalendarSundayFirstRows() {
         List<LocalDate> dates = CalendarWidgetProvider.visibleDates(YearMonth.of(2026, 8));
 

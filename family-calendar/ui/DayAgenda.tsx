@@ -1,3 +1,4 @@
+import { colorText } from './color-palette';
 import { CalendarDays, MapPin, Repeat2, LockKeyhole, Plus } from 'lucide-react';
 import { expandEvents, categoryAppearance, REPEATS, type CalendarEvent, type Occurrence, type EventCategory, type Member } from './calendar';
 
@@ -18,7 +19,7 @@ export function DayAgenda({day,events,categories,members,onOpen,onAdd}:{
         return <article className="day-detail-card" key={event.occurrenceId} style={{borderLeftColor:category.color}}>
           <div className="day-detail-heading"><h3>{event.isPrivate&&<LockKeyhole size={14}/>}<span>{event.title}</span></h3><button className="text-button" onClick={()=>onOpen(event)} aria-label={`${event.title} 수정`}>수정</button></div>
           <p className="day-detail-time">{event.startDate===event.endDate?(event.allDay?'종일':`${event.startTime} ~ ${event.endTime}`):`${event.startDate}${event.allDay?'':` ${event.startTime}`} ~ ${event.endDate}${event.allDay?' · 종일':` ${event.endTime}`}`}</p>
-          <div className="day-detail-meta"><span style={{color:category.color}}>{category.label}</span>{event.repeat!=='none'&&<span><Repeat2 size={12}/>{REPEATS[event.repeat]}</span>}</div>
+          <div className="day-detail-meta"><span className="day-category-label" style={{background:category.color,color:colorText(category.color)}}>{category.label}</span>{event.repeat!=='none'&&<span><Repeat2 size={12}/>{REPEATS[event.repeat]}</span>}</div>
           {event.location&&<p className="day-detail-location"><MapPin size={14}/>{event.location}</p>}
           {names&&<p className="day-detail-members">함께하는 가족 · {names}</p>}
           {event.notes&&<p className="day-detail-notes">{event.notes}</p>}

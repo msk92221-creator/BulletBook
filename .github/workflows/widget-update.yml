@@ -26,6 +26,7 @@ jobs:
       - run: npm ci
       - name: Calendar regression checks
         run: |
+          npm run test:category-colors
           npm run test:day-agenda
           npm run test:family
           npm run test:family-connection
@@ -44,7 +45,7 @@ jobs:
           ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon --console=plain
       - uses: actions/upload-artifact@v4
         with:
-          name: BulletBook-0.42.1-unsigned-for-verification
+          name: BulletBook-0.42.2-unsigned-for-verification
           path: |
             android/app/build/outputs/apk/release/*unsigned.apk
             android/app/build/reports/tests/testDebugUnitTest/
