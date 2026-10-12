@@ -437,3 +437,13 @@ Android의 기본 화면은 자세한 배치 편집보다 확인과 간단한 �
 - S펜 압력과 손바닥 오입력 방지
 - 이미지 삽입과 페이지 링크
 - Android 앱 종료 후 주기적 백그라운드 동기화
+
+### 0.42.1 Android 업데이트 게시
+
+기존 APK를 만든 집 컴퓨터에서 이 버전의 소스를 받은 뒤 PowerShell에서 다음을 실행합니다. Node.js, Java 21, Android SDK, 로그인된 GitHub CLI(`gh`)와 기존 `~/bulletbook-release-signing` 폴더가 필요합니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/release-widget-update.ps1 -Publish
+```
+
+스크립트는 테스트·빌드 후 0.42.0 APK와 새 APK의 서명, 앱 ID, 버전 코드를 검증합니다. APK·Windows ZIP을 초안 릴리스에 업로드한 뒤 최신 릴리스로 공개합니다. 서명키가 다르거나 최신 배포 버전이 이미 바뀌었으면 공개하지 않습니다. 완료 후 휴대폰의 `업데이트 확인`을 누릅니다. `-Publish`를 생략하면 파일 검증·생성까지만 실행합니다.

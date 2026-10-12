@@ -71,6 +71,10 @@ Source: $commit
 "@ | Set-Content -LiteralPath $notes -Encoding UTF8
 if(-not $Publish){Write-Host "Verified APK ready: $apk. Re-run with -Publish to publish.";exit 0}
 $repo='msk92221-creator/BulletBook'
+$currentTag=& gh api "repos/$repo/releases/latest" --jq '.tag_name'
+if($LASTEXITCODE -ne 0 -or $currentTag.Trim() -ne 'v0.42.0') {
+  throw 'The latest release changed. Check its version before publishing this update.'
+}
 # Upload into a draft first so the phone cannot see a release without its complete APK.
 Run 'gh' @('release','create',"v$version",$apk,$windows,'--repo',$repo,'--target',$commit,'--title',"BulletBook $version",'--notes-file',$notes,'--draft')
 Run 'gh' @('release','edit',"v$version",'--repo',$repo,'--draft=false','--latest')
