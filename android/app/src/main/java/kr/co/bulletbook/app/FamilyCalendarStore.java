@@ -13,6 +13,8 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Iterator;
 import java.util.UUID;
+import java.util.List;
+import java.util.ArrayList;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -123,6 +125,38 @@ final class FamilyCalendarStore {
             }catch(Exception ignored){/* One malformed event must not blank the widget. */}
         }
         return days;
+    }
+    /** Keep occurrence boundaries; equal titles on adjacent days must never be merged. */
+    static List<WidgetEventLayout.Event> widgetEvents(Context context,LocalDate from,LocalDate to) throws Exception {
+        SharedPreferences preferences=prefs(context);
+        List<WidgetEventLayout.Event> result=new ArrayList<>();
+        if(!preferences.contains("session"))return result;
+        JSONArray events=new JSONArray(preferences.getString("events","[]"));
+        JSONArray categories=new JSONArray(preferences.getString("categories","[]"));
+        JSONObject colors=new JSONObject();
+        colors.put("family","#4555ce").put("personal","#8260be").put("school","#257763")
+            .put("health","#bb5b3e").put("anniversary","#b37419");
+        for(int i=0;i<categories.length();i++) {
+            JSONObject category=categories.optJSONObject(i);
+            if(category!=null)colors.put(category.optString("id"),category.optBoolean("deleted")?"#737b8c":category.optString("color","#737b8c"));
+        }
+        for(int i=0;i<events.length();i++)try {
+            JSONObject event=events.getJSONObject(i);
+            String title=(event.optBoolean("isPrivate")?"🔒 ":"")+event.getString("title");
+            if(!event.optBoolean("allDay")&&event.getString("startDate").equals(event.getString("endDate")))title=event.optString("startTime")+" "+title;
+            WidgetEventLayout.Event base=new WidgetEventLayout.Event(event.getString("id"),title,
+                colors.optString(event.optString("category"),"#737b8c"),
+                LocalDate.parse(event.getString("startDate")),LocalDate.parse(event.getString("endDate")));
+            String until=event.optString("repeatUntil");
+            result.addAll(WidgetEventLayout.expand(base,event.optString("repeat","none"),until.isEmpty()?null:LocalDate.parse(until),from,to));
+        }catch(Exception ignored){/* Preserve the rest of the calendar if one event is malformed. */}
+        return result;
+    }
+    static JSONObject widgetLocalDays(Context context,JSONObject root) throws Exception {
+        SharedPreferences preferences=prefs(context);
+        if(!preferences.contains("session"))return root.optJSONObject("days");
+        JSONObject local=root.optBoolean("familyConnected")?root.optJSONObject("localDays"):null;
+        return local!=null?local:new JSONObject(preferences.getString("localDays","{}"));
     }
     static boolean occursOn(LocalDate start,long span,String repeat,LocalDate stop,LocalDate day) {
         if("none".equals(repeat))return !day.isBefore(start)&&!day.isAfter(start.plusDays(span));
