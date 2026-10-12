@@ -45,7 +45,7 @@ jobs:
           ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon --console=plain
       - uses: actions/upload-artifact@v4
         with:
-          name: BulletBook-0.42.2-unsigned-for-verification
+          name: BulletBook-0.42.3-unsigned-for-verification
           path: |
             android/app/build/outputs/apk/release/*unsigned.apk
             android/app/build/reports/tests/testDebugUnitTest/
