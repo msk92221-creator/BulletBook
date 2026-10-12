@@ -21,7 +21,8 @@ $apksigner=Join-Path $tools.FullName 'apksigner.bat'
 $aapt=Join-Path $tools.FullName 'aapt.exe'
 if(-not (Test-Path $apksigner)){throw 'Install Android SDK build-tools first.'}
 if($Publish){Run 'gh' @('auth','status')}
-Run 'git' @('diff','--quiet','HEAD')
+$worktreeState=& git status --porcelain --untracked-files=all
+if($LASTEXITCODE -ne 0 -or $worktreeState){throw 'Commit or move local changes and untracked files before creating a public release.'}
 $commit=(& git rev-parse HEAD).Trim()
 if($LASTEXITCODE -ne 0){throw 'Cannot determine source commit'}
 Run 'npm.cmd' @('ci')
