@@ -1,6 +1,6 @@
 {
   "appId": "kr.co.bulletbook.next",
-  "appName": "BulletBook 새버전",
+  "appName": "BulletBook",
   "webDir": "dist",
   "android": {
     "allowMixedContent": false,

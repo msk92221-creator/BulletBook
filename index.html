@@ -38,13 +38,14 @@
       </div>
     </header>
 
-    <section id="inboxPanel" class="inbox-panel" aria-label="언젠가 할 일" inert>
+    <section id="inboxPanel" class="inbox-panel" data-collapsed="true" aria-label="언젠가 할 일" inert>
       <div class="inbox-inner">
         <div class="inbox-heading">
-          <button type="button" id="inboxToggle" class="inbox-toggle" aria-expanded="true" aria-controls="inboxBody"><span aria-hidden="true">☑</span><strong>언젠가 할 일</strong><span id="inboxCount" class="inbox-count">0</span><span class="inbox-chevron" aria-hidden="true">⌃</span></button>
+          <button type="button" id="inboxToggle" class="inbox-toggle" aria-expanded="false" aria-controls="inboxBody"><span aria-hidden="true">☑</span><strong>언젠가 할 일</strong><span id="inboxCount" class="inbox-count">0</span></button>
           <button type="button" id="inboxCompleted" class="inbox-completed" aria-pressed="false">완료 0</button>
+          <button type="button" id="inboxDisclosure" class="inbox-disclosure" aria-label="할 일 펼치기" aria-expanded="false" aria-controls="inboxBody"><span class="inbox-toggle-label">펼치기</span><span class="inbox-chevron" aria-hidden="true">▼</span></button>
         </div>
-        <div id="inboxBody" class="inbox-body">
+        <div id="inboxBody" class="inbox-body" hidden>
           <ul id="inboxList" class="inbox-list" aria-label="언젠가 할 일 목록"></ul>
           <form id="inboxAddForm" class="inbox-add-form"><label class="sr-only" for="inboxInput">언젠가 할 일 추가</label><input id="inboxInput" type="text" maxlength="240" placeholder="날짜 없이 적어두기" autocomplete="off" required><button type="submit" aria-label="할 일 추가">＋ 추가</button></form>
           <button type="button" id="inboxUndo" class="inbox-undo" hidden>삭제 실행 취소</button>

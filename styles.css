@@ -4035,9 +4035,11 @@ textarea::placeholder {
 /* The inbox has its own fixed grid row, so changing notebook pages never hides it. */
 .inbox-panel{grid-column:1/-1;grid-row:2;min-width:0;z-index:15;background:#f7f9fe;border-bottom:1px solid #dce3f0;color:#22334f}
 .inbox-inner{max-width:960px;margin:0 auto;padding:0 max(16px,var(--safe-right)) 0 max(16px,var(--safe-left))}
-.inbox-heading{display:flex;align-items:center;gap:12px;min-height:44px}
-.inbox-toggle{display:flex;align-items:center;gap:9px;flex:1;min-width:0;padding:8px 0;border:0;background:none;text-align:left;cursor:pointer;font-size:13px}
-.inbox-toggle>span:first-child{color:#4966ad;font-size:18px}.inbox-toggle strong{font-size:13px}.inbox-count{background:#e1e9fa;color:#355692;min-width:22px;text-align:center;border-radius:7px;padding:2px 5px;font-size:11px}.inbox-chevron{color:#73829c;font-size:16px;margin-left:2px}
+.inbox-heading{display:flex;align-items:center;gap:10px;min-height:44px}
+.inbox-toggle{display:flex;align-items:center;gap:9px;flex:1;min-width:0;min-height:44px;padding:8px 0;border:0;background:none;text-align:left;cursor:pointer;font-size:13px}
+.inbox-toggle>span:first-child{color:#4966ad;font-size:18px}.inbox-toggle strong{font-size:13px;white-space:nowrap}.inbox-count{background:#e1e9fa;color:#355692;min-width:22px;text-align:center;border-radius:7px;padding:2px 5px;font-size:11px}.inbox-chevron{font-size:12px}
+.inbox-disclosure{display:flex;align-items:center;justify-content:center;gap:7px;flex-shrink:0;min-width:72px;min-height:44px;padding:0 8px;border:0;border-radius:8px;background:#e4ebf8;color:#355692;font-size:12px;font-weight:700;cursor:pointer}.inbox-disclosure:hover{background:#d8e3f7}
+.inbox-panel[data-collapsed=true] .inbox-completed{display:none}
 .inbox-completed,.inbox-undo{border:0;background:none;padding:8px 0;color:#61728e;font-size:12px;cursor:pointer}.inbox-completed[aria-pressed=true]{color:#345ba4;font-weight:700}
 .inbox-body{padding:0 0 10px}.inbox-body[hidden],.inbox-undo[hidden]{display:none}
 .inbox-list{list-style:none;padding:0;margin:0 0 7px;max-height:min(144px,22dvh);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}

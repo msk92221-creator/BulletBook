@@ -40,12 +40,13 @@
   function create({element, getBook, commit, notify}) {
     const find = selector => element.querySelector(selector);
     const toggle = find('#inboxToggle'), body = find('#inboxBody'), count = find('#inboxCount');
+    const disclosure = find('#inboxDisclosure');
     const completedButton = find('#inboxCompleted'), list = find('#inboxList');
     const form = find('#inboxAddForm'), input = find('#inboxInput');
     const undo = find('#inboxUndo');
-    let collapsed = false, showCompleted = false, editing = null, lastDeleted = null;
+    let collapsed = true, showCompleted = false, editing = null, lastDeleted = null;
     let renderedBook = '', signature = '';
-    try { collapsed = localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { /* Optional display preference. */ }
+    try { collapsed = localStorage.getItem(COLLAPSED_KEY) !== '0'; } catch { /* Optional display preference. */ }
     const button = (text, label, action, className = '') => {
       const node = document.createElement('button');
       node.type = 'button'; node.textContent = text; node.className = className;
@@ -82,7 +83,12 @@
       completedButton.textContent = showCompleted ? `할 일 ${open.length}` : `완료 ${done.length}`;
       completedButton.setAttribute('aria-pressed', String(showCompleted));
       toggle.setAttribute('aria-expanded', String(!collapsed));
-      find('.inbox-chevron').textContent = collapsed ? '⌄' : '⌃';
+      disclosure.setAttribute('aria-expanded', String(!collapsed));
+      const action = collapsed ? '펼치기' : '접기';
+      toggle.setAttribute('aria-label', `언젠가 할 일 ${action}, 남은 ${open.length}개`);
+      disclosure.setAttribute('aria-label', `할 일 ${action}`);
+      find('.inbox-toggle-label').textContent = action;
+      find('.inbox-chevron').textContent = collapsed ? '▼' : '▲';
       body.hidden = collapsed; element.dataset.collapsed = String(collapsed);
       undo.hidden = !lastDeleted || !book.inboxTasks?.some(task => task.id === lastDeleted && task.deleted);
       const next = JSON.stringify([book.id, tasks, showCompleted, editing?.id]);
@@ -150,12 +156,14 @@
       }
     }
 
-    toggle.addEventListener('click', () => {
-      collapsed = !collapsed;
+    const setCollapsed = value => {
+      collapsed = value;
       try { localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0'); } catch { /* Optional preference. */ }
       render();
-    });
-    completedButton.addEventListener('click', () => { showCompleted = !showCompleted; editing = null; collapsed = false; render(); });
+    };
+    toggle.addEventListener('click', () => setCollapsed(!collapsed));
+    disclosure.addEventListener('click', () => setCollapsed(!collapsed));
+    completedButton.addEventListener('click', () => { showCompleted = !showCompleted; editing = null; setCollapsed(false); });
     form.addEventListener('submit', event => {
       event.preventDefault();
       const title = input.value.trim();

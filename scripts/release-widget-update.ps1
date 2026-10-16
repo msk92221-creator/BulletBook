@@ -11,7 +11,7 @@ if($version -notmatch '^\d+\.\d+\.\d+$'){throw 'Invalid release version'}
 $keyDirectory=$env:BULLETBOOK_KEYSTORE_DIR
 if(-not $keyDirectory){$keyDirectory=Join-Path $env:USERPROFILE 'bulletbook-release-signing'}
 foreach($name in @('bulletbook-release.jks','keystore.properties')) {
-  if(-not (Test-Path -LiteralPath (Join-Path $keyDirectory $name))){throw "Existing release signing file is required: $name. Run on the computer that built 0.42.3."}
+  if(-not (Test-Path -LiteralPath (Join-Path $keyDirectory $name))){throw "Existing release signing file is required: $name. Run on the computer that built 0.43.0."}
 }
 $env:BULLETBOOK_KEYSTORE_DIR=$keyDirectory
 $sdk=$env:ANDROID_HOME
@@ -36,7 +36,7 @@ Run 'npm.cmd' @('run','test:family-connection')
 Run 'npm.cmd' @('run','test:widget-snapshot')
 Run 'npm.cmd' @('run','test:widget-startup')
 Run 'npm.cmd' @('run','build:web')
-# cap sync rewrites this path; keep the checked-in patched runtime used by 0.42.3.
+# cap sync rewrites this path; keep the checked-in patched runtime used by 0.43.0.
 $settings=Get-Content -Raw android/capacitor.settings.gradle
 try {Run 'node' @('node_modules/@capacitor/cli/bin/capacitor','sync','android')}
 finally {[IO.File]::WriteAllText((Join-Path (Get-Location) 'android/capacitor.settings.gradle'),$settings,(New-Object Text.UTF8Encoding $false))}
@@ -51,10 +51,10 @@ $cert=($certLines | Select-String 'certificate SHA-256 digest:').Line
 if(-not $cert){throw 'Cannot read APK signer'}
 $releaseDir=Join-Path (Get-Location) 'release'
 New-Item -ItemType Directory -Force $releaseDir | Out-Null
-$previous=Join-Path $releaseDir 'BulletBook_previous_0.42.3.apk'
+$previous=Join-Path $releaseDir 'BulletBook_previous_0.43.0.apk'
 # Public APK contains only the certificate, never the private signing key.
 if(-not(Test-Path $previous)) {
-  Invoke-WebRequest 'https://github.com/msk92221-creator/BulletBook/releases/download/v0.42.3/BulletBook_v0.42.3.apk' -OutFile $previous
+  Invoke-WebRequest 'https://github.com/msk92221-creator/BulletBook/releases/download/v0.43.0/BulletBook_v0.43.0.apk' -OutFile $previous
 }
 $oldLines=& $apksigner verify --print-certs $previous
 if($LASTEXITCODE -ne 0){throw 'Previous APK verification failed.'}
@@ -62,7 +62,7 @@ $oldCert=($oldLines | Select-String 'certificate SHA-256 digest:').Line
 if(($cert -join "`n") -ne ($oldCert -join "`n")){throw 'Signing key differs from the installed app. Release was not published.'}
 $badging=& $aapt dump badging $built
 if($LASTEXITCODE -ne 0){throw 'Cannot read APK metadata'}
-if(($badging -join "`n") -notmatch "package: name='kr.co.bulletbook.next' versionCode='113' versionName='0.43.0'"){throw 'APK ID or version does not match this release.'}
+if(($badging -join "`n") -notmatch "package: name='kr.co.bulletbook.next' versionCode='114' versionName='0.43.1'"){throw 'APK ID or version does not match this release.'}
 $apk=Join-Path $releaseDir "BulletBook_v$version.apk"
 Copy-Item -LiteralPath $built -Destination $apk -Force
 & (Join-Path $PSScriptRoot 'package-windows.ps1')
@@ -70,15 +70,16 @@ $windows=Join-Path $releaseDir "BulletBook_windows_v$version.zip"
 if(-not(Test-Path $windows)){throw 'Windows package missing'}
 $notes=Join-Path $releaseDir 'release-notes.txt'
 @"
-불렛북 상단에 날짜 없이 보관하는 ‘언젠가 할 일’ 체크리스트를 추가했습니다. 페이지를 바꿔도 표시되며, 완료·다시 열기·수정·삭제 취소와 접기/펼치기를 지원합니다. 불렛북 백업과 기존 OneDrive 동기화에 포함됩니다.
+상단 할 일 목록 오른쪽에 ‘펼치기 ▼ / 접기 ▲’ 버튼을 추가했습니다. 접으면 제목과 남은 개수만 한 줄로 표시해 노트를 넓게 쓸 수 있습니다. 처음 사용할 때는 접혀 있고, 이후에는 마지막으로 선택한 상태를 유지합니다. 기존 할 일과 백업·동기화는 유지됩니다.
 
-기존 0.42.3 APK와 동일한 서명, 앱 ID를 검증했습니다. 기존 앱의 업데이트 확인으로 설치하며 삭제할 필요가 없습니다.
+기존 0.43.0 APK와 동일한 서명, 앱 ID를 검증했습니다. 기존 앱의 업데이트 확인으로 설치하며 삭제할 필요가 없습니다.
+Android 앱 이름을 BulletBook으로 통일했습니다. 기존 ‘BulletBook 새버전’을 그대로 업데이트합니다. 오래된 별도 앱이 남아 있다면 기록을 옮기고 백업한 뒤 직접 삭제하세요. 현재 앱의 버전은 0.43.1입니다.
 Source: $commit
 "@ | Set-Content -LiteralPath $notes -Encoding UTF8
 if(-not $Publish){Write-Host "Verified APK ready: $apk. Re-run with -Publish to publish.";exit 0}
 $repo='msk92221-creator/BulletBook'
 $currentTag=& gh api "repos/$repo/releases/latest" --jq '.tag_name'
-if($LASTEXITCODE -ne 0 -or $currentTag.Trim() -ne 'v0.42.3') {
+if($LASTEXITCODE -ne 0 -or $currentTag.Trim() -ne 'v0.43.0') {
   throw 'The latest release changed. Check its version before publishing this update.'
 }
 # Upload into a draft first so the phone cannot see a release without its complete APK.
