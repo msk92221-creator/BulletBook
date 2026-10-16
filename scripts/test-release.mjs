@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {APP_ID, SIGNER_SHA256, readMetadata, compareVersions, androidMetadata, assertUpgrade, assertApkIdentity} from './release-lib.mjs';
+
+const current = readMetadata();
+assert.equal(compareVersions('0.43.10', '0.43.9'), 1);
+assert.equal(compareVersions('1.0.0', '0.99.99'), 1);
+assert.equal(compareVersions('0.43.1', '0.43.1'), 0);
+for (const value of ['0.43.1-beta', '01.2.3', 'v0.43.1', '1.2', '../oops']) assert.throws(() => compareVersions(value, '0.43.1'));
+assertUpgrade({version:'0.43.2',versionCode:115}, {version:'0.43.1',versionCode:114});
+assert.throws(() => assertUpgrade({version:'0.43.2',versionCode:114}, {version:'0.43.1',versionCode:114}));
+assert.throws(() => assertUpgrade({version:'0.43.1',versionCode:116}, {version:'0.43.2',versionCode:115}));
+assert.throws(() => androidMetadata('applicationId "another.app"\nversionCode 115\nversionName "0.43.2"'));
+const badging = `package: name='${APP_ID}' versionCode='${current.versionCode}' versionName='${current.version}'\napplication-label:'BulletBook'\n`;
+const cert = `Signer #1 certificate SHA-256 digest: ${SIGNER_SHA256}\n`;
+assertApkIdentity(badging, cert, current);
+assert.throws(() => assertApkIdentity(badging, cert.replace(SIGNER_SHA256, 'f'.repeat(64)), current), /certificate/);
+assert.throws(() => assertApkIdentity(badging, '', current), /certificate/);
+assert.throws(() => assertApkIdentity(badging, cert + cert, current), /certificate/);
+assert.throws(() => assertApkIdentity(badging.replace(APP_ID, 'kr.co.bulletbook.other'), cert, current), /identity/);
+assert.throws(() => assertApkIdentity(badging.replace(`versionCode='${current.versionCode}'`, "versionCode='1'"), cert, current), /identity/);
+assert.throws(() => assertApkIdentity(badging.replace("application-label:'BulletBook'", "application-label:'BulletBook 새버전'"), cert, current), /name/);
+console.log('Release checks: version ordering, update code, consistent metadata, app identity and signing mismatch rejection passed.');

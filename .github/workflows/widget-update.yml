@@ -6,6 +6,12 @@ on:
     paths:
       - 'android/**'
       - 'family-calendar/**'
+      - 'scripts/*release*.mjs'
+      - 'scripts/ci-signing.mjs'
+      - 'package*.json'
+      - 'VERSION.txt'
+      - 'capacitor.config.json'
+      - '.github/workflows/release.yml'
       - '.github/workflows/widget-update.yml'
   workflow_dispatch:
 permissions:
@@ -26,6 +32,7 @@ jobs:
       - run: npm ci
       - name: Calendar regression checks
         run: |
+          npm run test:release
           npm run test:inbox
           npm run test:sync
           npm run test:windows-host
@@ -48,7 +55,7 @@ jobs:
           ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon --console=plain
       - uses: actions/upload-artifact@v4
         with:
-          name: BulletBook-0.43.1-unsigned-for-verification
+          name: BulletBook-unsigned-${{ github.run_id }}
           path: |
             android/app/build/outputs/apk/release/*unsigned.apk
             android/app/build/reports/tests/testDebugUnitTest/

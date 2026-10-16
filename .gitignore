@@ -8,3 +8,6 @@ android/app/build/
 .android-gradle-cache/
 release/
 .release-staging/
+*.jks
+*.keystore
+keystore.properties

@@ -1,4 +1,11 @@
-# BulletBook 0.43.1
+# BulletBook 0.43.2
+
+## 0.43.2 GitHub 자동 서명·배포
+
+- 다른 컴퓨터에서 변경하고 버전을 올려 GitHub에 올리면 Android APK와 Windows 파일을 자동 배포합니다.
+- 기존 서명키는 GitHub의 암호화된 비밀 설정에서 사용합니다. 앱 ID·이름·서명을 확인하고, 서명이 다르거나 버전이 맞지 않으면 배포를 중단합니다.
+- 현재 BulletBook을 그대로 업데이트합니다. 기존 기록, 할 일 접기·펼치기, 가족 달력과 동기화는 유지합니다.
+- 개발 PC의 서명키 설정 없이 업데이트할 수 있습니다. [배포 방법](https://github.com/msk92221-creator/BulletBook/blob/master/docs/releases.md)을 참고하세요.
 
 ## 0.43.1 할 일 접기·펼치기 버튼 · 앱 이름 통일
 

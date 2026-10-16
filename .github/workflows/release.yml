@@ -1,0 +1,146 @@
+name: Signed BulletBook release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bulletbook-production-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'msk92221-creator/BulletBook' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.version.outputs.build }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - id: version
+        name: Check version and update compatibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-release.mjs prepare
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # This environment only allows master. Its signing secrets are never used by PR checks.
+    environment: android-release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - name: Verify app and release behavior
+        run: |
+          for check in release inbox sync layout notebook-navigation windows-host category-colors family family-connection widget-snapshot widget-startup; do
+            npm run "test:$check"
+          done
+      - name: Build web assets and retain patched Android runtime
+        run: |
+          npm run build:web
+          cp android/capacitor.settings.gradle "$RUNNER_TEMP/capacitor.settings.gradle"
+          node node_modules/@capacitor/cli/bin/capacitor sync android
+          cp "$RUNNER_TEMP/capacitor.settings.gradle" android/capacitor.settings.gradle
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Restore existing signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PROPERTIES_BASE64: ${{ secrets.ANDROID_KEYSTORE_PROPERTIES_BASE64 }}
+        run: node scripts/ci-signing.mjs
+      - name: Build signed APK and run Android tests
+        working-directory: android
+        env:
+          BULLETBOOK_KEYSTORE_DIR: ${{ runner.temp }}/bulletbook-signing
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon --console=plain
+      - name: Remove temporary signing files
+        if: always()
+        run: node scripts/ci-signing.mjs cleanup
+      - name: Package Android and Windows
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir -p release
+          cp android/app/build/outputs/apk/release/app-release.apk "release/BulletBook_v${RELEASE_VERSION}.apk"
+          pwsh -NoProfile -File scripts/package-windows.ps1
+          node scripts/ci-release.mjs verify
+      - name: Verify package contents
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile
+          version = os.environ['RELEASE_VERSION']
+          with ZipFile(f'release/BulletBook_v{version}.apk') as apk, ZipFile(f'release/BulletBook_windows_v{version}.zip') as windows:
+              for archive in (apk, windows):
+                  for name in archive.namelist():
+                      assert not name.lower().endswith(('.jks', '.keystore', 'keystore.properties', 'android-preview.html')), 'Unexpected private or preview file in package'
+              for name in ('app.js', 'inbox.js', 'index.html', 'styles.css'):
+                  source = Path(name).read_bytes()
+                  assert apk.read('assets/public/' + name) == source, 'APK source mismatch: ' + name
+                  assert windows.read(f'BulletBook_Windows_Android_v{version}/' + name) == source, 'Windows source mismatch: ' + name
+          print('Both packages match source and contain no signing/preview files.')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: signed-release-${{ needs.prepare.outputs.version }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            release/BulletBook_v${{ needs.prepare.outputs.version }}.apk
+            release/BulletBook_windows_v${{ needs.prepare.outputs.version }}.zip
+            release/SHA256SUMS
+            release/release-manifest.json
+            release/release-notes.txt
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: signed-release-${{ needs.prepare.outputs.version }}
+          path: release
+      - name: Verify uploads and publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-release.mjs publish
