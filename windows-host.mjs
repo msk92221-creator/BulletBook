@@ -48,6 +48,7 @@ const contentTypes = {
 const publicFiles = new Set([
   "index.html",
   "app.js",
+  "inbox.js",
   "cloud-sync.js",
   "family-bridge.js",
   "family-room/index.html",

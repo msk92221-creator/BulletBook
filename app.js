@@ -453,6 +453,7 @@
   let activePageId = null;
   let elementClipboard = null;
   let cloudSync = null;
+  let inbox = null;
   let keyboardScope = "canvas";
   let mobileWriteSymbol = "•";
   let mobileWriteMode = "once";
@@ -704,6 +705,7 @@
       pages,
       groups: [],
       calendarEvents: [],
+      inboxTasks: [],
       goalSystem: createEmptyGoalSystem(),
     };
   }
@@ -1540,6 +1542,7 @@
     value.version = Math.max(Number(value.version) || 3, 6);
     value.goalSystem = normalizeGoalSystem(value.goalSystem);
     value.calendarEvents = normalizeCalendarEvents(value.calendarEvents);
+    value.inboxTasks = window.BulletBookInbox.normalizeTasks(value.inboxTasks);
     dedupeDuplicatedLegacyEvents(value);
     value.groups = Array.isArray(value.groups) ? value.groups : [];
     value.groups.forEach(group => {
@@ -2912,6 +2915,7 @@
   }
 
   function renderAll() {
+    inbox?.render();
     renderPageList();
     renderNotebookSearch();
     renderSpread();
@@ -9021,6 +9025,7 @@
   }
 
   function isPristineBook(value) {
+    if (Array.isArray(value?.inboxTasks) && value.inboxTasks.length) return false;
     if (Array.isArray(value?.calendarEvents) && value.calendarEvents.length) return false;
     const goalSystem = value?.goalSystem;
     if (goalSystem && [goalSystem.areas, goalSystem.goals, goalSystem.missions]
@@ -9593,6 +9598,10 @@
   }
 
   function bindEvents() {
+    inbox = window.BulletBookInbox.create({
+      element: $("#inboxPanel"), getBook: () => book,
+      commit: commitHistory, notify: showToast,
+    });
     bindPageListResizer();
     bindPageListDragScrolling();
     $$(".tool").forEach(button => button.addEventListener("click", () => setTool(button.dataset.tool)));

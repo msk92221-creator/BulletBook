@@ -467,7 +467,7 @@
       localBook,
       remoteBook,
       preferRemote,
-      new Set(["pages", "groups", "calendarEvents", "goalSystem", "updatedAt", "syncPristine"])
+      new Set(["pages", "groups", "calendarEvents", "inboxTasks", "goalSystem", "updatedAt", "syncPristine"])
     );
     const groups = mergeEntityList(
       baseBook?.groups,
@@ -490,6 +490,16 @@
       preferRemote,
       mergeGroup
     );
+    // Missing fields from an older app are not an intentional inbox deletion.
+    // Tasks are deleted explicitly with tombstones, which also prevent resurrection.
+    const inboxTasks = mergeEntityList(
+      baseBook?.inboxTasks,
+      localBook?.inboxTasks ?? baseBook?.inboxTasks,
+      remoteBook?.inboxTasks ?? baseBook?.inboxTasks,
+      preferRemote,
+      (base, local, remote, fallback) => mergeRecord(base, local, remote,
+        updatedTime(local) === updatedTime(remote) ? fallback : updatedTime(remote) > updatedTime(local))
+    );
     const goalSystem = mergeGoalSystem(
       baseBook?.goalSystem,
       localBook?.goalSystem,
@@ -500,13 +510,14 @@
     value.groups = groups.items;
     value.pages = pages.items;
     value.calendarEvents = calendarEvents.items;
+    value.inboxTasks = inboxTasks.items;
     value.goalSystem = goalSystem.value;
     value.updatedAt = new Date().toISOString();
     value.syncPristine = false;
     return {
       book: value,
       hadConflict: metadata.conflict || groups.conflict || pages.conflict ||
-        calendarEvents.conflict || goalSystem.conflict,
+        calendarEvents.conflict || inboxTasks.conflict || goalSystem.conflict,
     };
   }
 

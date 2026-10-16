@@ -38,7 +38,7 @@ button { color: inherit; }
   min-height: 100dvh;
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
-  grid-template-rows: calc(72px + var(--safe-top)) minmax(0, 1fr);
+  grid-template-rows: calc(72px + var(--safe-top)) auto minmax(0, 1fr);
 }
 
 .topbar {
@@ -192,7 +192,7 @@ button { color: inherit; }
   position: relative;
   z-index: 20;
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 3;
   display: flex;
   min-height: 0;
   flex-direction: column;
@@ -658,7 +658,7 @@ body.resizing-page-list {
 
 .workspace {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 3;
   display: grid;
   min-width: 0;
   min-height: 0;
@@ -2594,7 +2594,7 @@ body.resizing-page-list {
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: calc(58px + var(--safe-top)) minmax(0, 1fr);
+    grid-template-rows: calc(58px + var(--safe-top)) auto minmax(0, 1fr);
   }
   .topbar {
     padding:
@@ -2658,7 +2658,7 @@ body.resizing-page-list {
 
 @media (max-width: 720px) {
   .app-shell {
-    grid-template-rows: calc(52px + var(--safe-top)) minmax(0, 1fr);
+    grid-template-rows: calc(52px + var(--safe-top)) auto minmax(0, 1fr);
   }
   .topbar {
     padding:
@@ -2766,7 +2766,7 @@ body.resizing-page-list {
 .android-app .mobile-app-only { display: grid; }
 .android-app .app-shell {
   grid-template-columns: 1fr;
-  grid-template-rows: calc(50px + var(--safe-top)) minmax(0, 1fr);
+  grid-template-rows: calc(50px + var(--safe-top)) auto minmax(0, 1fr);
 }
 .android-app .topbar {
   padding:
@@ -3622,7 +3622,7 @@ button:disabled {
 @media (min-width: 981px) {
   .app-shell {
     grid-template-columns: 272px minmax(0, 1fr);
-    grid-template-rows: calc(64px + var(--safe-top)) minmax(0, 1fr);
+    grid-template-rows: calc(64px + var(--safe-top)) auto minmax(0, 1fr);
   }
 
   .topbar {
@@ -3982,7 +3982,7 @@ textarea::placeholder {
 .notebook-agenda p { margin: 8px 0; line-height: 1.6; font-size: 14px; overflow-wrap: anywhere; }
 .notebook-calendar-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding-top: 8px; }
 .notebook-calendar-actions button { min-height: 46px; }
-.android-app .app-shell { grid-template-rows: calc(60px + var(--safe-top)) minmax(0, 1fr); }
+.android-app .app-shell { grid-template-rows: calc(60px + var(--safe-top)) auto minmax(0, 1fr); }
 .android-app .book-title { width: 100%; font-size: 15px; }
 .android-app .brand > div { width: 100%; min-width: 0; }
 .android-app .save-state { display: flex; margin-top: 1px; font-size: 10px; }
@@ -4031,3 +4031,27 @@ textarea::placeholder {
 @media print {
   .notebook-context, .notebook-tabs, .notebook-search, .notebook-search-results, .notebook-calendar-dialog { display: none !important; }
 }
+
+/* The inbox has its own fixed grid row, so changing notebook pages never hides it. */
+.inbox-panel{grid-column:1/-1;grid-row:2;min-width:0;z-index:15;background:#f7f9fe;border-bottom:1px solid #dce3f0;color:#22334f}
+.inbox-inner{max-width:960px;margin:0 auto;padding:0 max(16px,var(--safe-right)) 0 max(16px,var(--safe-left))}
+.inbox-heading{display:flex;align-items:center;gap:12px;min-height:44px}
+.inbox-toggle{display:flex;align-items:center;gap:9px;flex:1;min-width:0;padding:8px 0;border:0;background:none;text-align:left;cursor:pointer;font-size:13px}
+.inbox-toggle>span:first-child{color:#4966ad;font-size:18px}.inbox-toggle strong{font-size:13px}.inbox-count{background:#e1e9fa;color:#355692;min-width:22px;text-align:center;border-radius:7px;padding:2px 5px;font-size:11px}.inbox-chevron{color:#73829c;font-size:16px;margin-left:2px}
+.inbox-completed,.inbox-undo{border:0;background:none;padding:8px 0;color:#61728e;font-size:12px;cursor:pointer}.inbox-completed[aria-pressed=true]{color:#345ba4;font-weight:700}
+.inbox-body{padding:0 0 10px}.inbox-body[hidden],.inbox-undo[hidden]{display:none}
+.inbox-list{list-style:none;padding:0;margin:0 0 7px;max-height:min(144px,22dvh);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.inbox-task{display:flex;align-items:center;gap:9px;min-height:40px;border-top:1px solid #e7ebf3}.inbox-task:first-child{border-top:0}
+.inbox-check{flex:0 0 22px;width:22px;height:22px;margin:0 2px;accent-color:#4168b3;cursor:pointer}
+.inbox-task-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;padding:10px 0;border:0;background:none;color:inherit;font-size:13px;cursor:text}.inbox-task.is-completed .inbox-task-title{text-decoration:line-through;color:#7b8799}
+.inbox-delete{flex:0 0 36px;height:38px;border:0;background:none;color:#8190a5;font-size:21px;cursor:pointer}.inbox-delete:hover{color:#b83d47;background:#fff0f1;border-radius:7px}
+.inbox-empty{font-size:12px;color:#7b8799;padding:1px 0 5px;line-height:1.5}
+.inbox-add-form,.inbox-edit-form{display:flex;gap:6px;min-width:0}.inbox-edit-form{flex:1;padding:4px 0;flex-wrap:wrap}
+.inbox-add-form input,.inbox-edit-form input{flex:1;min-width:0;min-height:38px;padding:7px 10px;border:1px solid #d7dfed;border-radius:8px;background:#fff;color:#22334f;font-size:13px}
+.inbox-add-form button,.inbox-edit-form button{flex-shrink:0;min-height:38px;padding:6px 12px;border:1px solid #cedaee;border-radius:8px;background:#e9effb;color:#31579a;font-size:12px;cursor:pointer}
+.inbox-edit-form input{flex-basis:55%}.inbox-edit-form button{padding:6px 8px}
+.inbox-panel button:focus-visible,.inbox-panel input:focus-visible{outline:2px solid #4168b3;outline-offset:2px}
+@media(max-width:720px){.inbox-inner{padding-left:max(12px,var(--safe-left));padding-right:max(12px,var(--safe-right))}.inbox-list{max-height:min(120px,20dvh)}}
+@media print{.inbox-panel{display:none!important}}
+
+@media(min-width:981px){.inbox-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px}.inbox-empty{grid-column:1/-1}}

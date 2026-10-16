@@ -39,6 +39,7 @@ try {
   }
   if (!ready) throw new Error(`Windows host did not start: ${stderr.trim()}`);
 
+  await expectStatus("/inbox.js", 200);
   await expectStatus("/api/cloud/status", 403);
   const index = await expectStatus("/", 200);
   const cookie = String(index.headers.get("set-cookie") || "").split(";", 1)[0];

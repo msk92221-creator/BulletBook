@@ -7,6 +7,7 @@ const dist = resolve(root, "dist");
 const files = [
   "index.html",
   "app.js",
+  "inbox.js",
   "cloud-sync.js",
   "family-bridge.js",
   "family-room",

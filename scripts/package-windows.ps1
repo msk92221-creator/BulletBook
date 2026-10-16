@@ -24,6 +24,7 @@ $packageRoot = Join-Path $stagingRoot $folderName
 $zipPath = Join-Path $OutputDirectory "BulletBook_windows_v$version.zip"
 $files = @(
   "app.js",
+  "inbox.js",
   "cloud-sync.js",
   "family-bridge.js",
   "favicon.svg",
